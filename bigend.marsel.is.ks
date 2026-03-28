@@ -84,5 +84,9 @@ firewall-offline-cmd --remove-service=dhcpv6-client
 # cleanup: we do not need the anaconda cfg files
 rm -f /root/anaconda-ks.cfg
 # /root/original-ks.cfg gets written way past %end, so it will remain even if we remove it here.
+
+# last upgrade
+dnf upgrade -y --refresh
+
 %end
 
