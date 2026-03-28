@@ -10,9 +10,9 @@ timezone Europe/Oslo --utc
 
 network --bootproto=static --ip=10.0.0.4 --netmask=255.255.255.0 --gateway=10.0.0.138 --nameserver=1.1.1.1 --hostname=bigend.marsel.is
 
-bootloader --location=mbr
+bootloader --timeout=1
 zerombr
-clearpart --all --initlabel
+clearpart --all --initlabel --disklabel=gpt
 part /boot/efi --fstype=efi --size=1024
 part /boot --fstype=xfs --size=2048
 part swap --size=4096
@@ -63,6 +63,13 @@ dnf install -y epel-release
 dnf install -y fail2ban.noarch fail2ban-firewalld.noarch fail2ban-mail.noarch fail2ban-selinux.noarch fail2ban-sendmail.noarch fail2ban-server.noarch fail2ban-systemd.noarch fail2ban-tests.noarch
 systemctl enable fail2ban.service
 #
+# cleanup: firewall-cmd goes through the deamon, but the environemnt
+# is chrooted. firewall-offline-cmd edits the xml directly
+# cleanup: the cockpit package leaves a hole in the firewall
+firewall-offline-cmd --remove-service=cockpit
+# cleanup: no DHCPv6 on the segment
+firewall-offline-cmd --remove-service=dhcpv6-client
+# cleanup: we do not need the anaconda cfg files
 rm -f /root/anaconda-ks.cfg /root/original-ks.cfg
 %end
 
