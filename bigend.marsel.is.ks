@@ -28,6 +28,9 @@ sshkey --username=gmarselis "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIL5G39vHZAQFo6B
 xauth
 vim-enhanced
 nginx
+certmonger
+# certbot does what certmonger does manually. not sure if i need it, adding it for now
+## certbot
 dnsmasq
 tftp-server
 gnutls
@@ -49,6 +52,7 @@ gnutls-utils
 %post
 echo "%wheel ALL=(ALL) NOPASSWD: ALL" > /etc/sudoers.d/gmarselis
 systemctl enable nginx.service
+systemctl enable certmonger.service
 systemctl enable dnsmasq.service
 systemctl enable tftp.socket
 hostnamectl --static bigend.marsel.is
@@ -74,6 +78,7 @@ firewall-offline-cmd --remove-service=cockpit
 # cleanup: no DHCPv6 on the segment
 firewall-offline-cmd --remove-service=dhcpv6-client
 # cleanup: we do not need the anaconda cfg files
-rm -f /root/anaconda-ks.cfg /root/original-ks.cfg
+rm -f /root/anaconda-ks.cfg
+# /root/original-ks.cfg gets written way past %end, so it will remain even if we remove it here.
 %end
 
