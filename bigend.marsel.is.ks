@@ -1,0 +1,64 @@
+# Version: 0.1
+# Host: bigend.marsel.is
+
+text
+reboot
+
+lang en_US.UTF-8
+keyboard us
+timezone Europe/Oslo --utc
+
+network --bootproto=static --ip=10.0.0.4 --netmask=255.255.255.0 --gateway=10.0.0.138 --nameserver=1.1.1.1 --hostname=bigend.marsel.is
+
+bootloader --location=mbr
+zerombr
+clearpart --all --initlabel
+part /boot/efi --fstype=efi --size=1024
+part /boot --fstype=xfs --size=2048
+part swap --size=4096
+part / --fstype=xfs --grow
+
+rootpw --lock
+user --name=gmarselis --groups=wheel --password=! --iscrypted
+sshkey --username=gmarselis "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIL5G39vHZAQFo6BuFfJtIFUR/4DyQtf9KIIy4jJlcBQt gmarselis@molly.vetinst.no"
+
+%packages
+@^minimal-environment
+xauth
+vim-enhanced
+nginx
+dnsmasq
+tftp-server
+-polkit
+-polkit-pkla-compat
+# if you are treating the vm as cattle, you do not need qemu-guest-agent
+-qemu-guest-agent
+%end
+
+%addon com_redhat_kdump --disable
+%end
+
+%post
+echo "%wheel ALL=(ALL) NOPASSWD: ALL" > /etc/sudoers.d/gmarselis
+systemctl enable nginx.service
+systemctl enable dnsmasq.service
+systemctl enable tftp.socket
+hostnamectl --static bigend.marsel.is
+hostnamectl --pretty bigend
+dnf remove --yes sssd sssd-common sssd-client
+dnf remove --yes iwl100-firmware iwl1000-firmware iwl105-firmware iwl135-firmware iwl2000-firmware iwl2030-firmware iwl3160-firmware iwl5000-firmware iwl5150-firmware iwl6000g2a-firmware iwl6050-firmware iwl7260-firmware
+# anaconda does not know about epel-release. If you need it, put it here
+# declaring it in %packages will hang the installation.
+# Needed for several of the packages that follow it.
+dnf install -y epel-release
+# if you need /usr/bin/audit2allow:
+## dnf install -y policycoreutils-python-utils
+#
+# fail2ban
+## fail2ban-selinux.noarch pulls policycoreutils-python-utils
+dnf install -y fail2ban.noarch fail2ban-firewalld.noarch fail2ban-mail.noarch fail2ban-selinux.noarch fail2ban-sendmail.noarch fail2ban-server.noarch fail2ban-systemd.noarch fail2ban-tests.noarch
+systemctl enable fail2ban.service
+#
+rm -f /root/anaconda-ks.cfg /root/original-ks.cfg
+%end
+
