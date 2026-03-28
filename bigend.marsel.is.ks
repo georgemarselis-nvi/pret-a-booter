@@ -33,6 +33,10 @@ tftp-server
 -polkit-pkla-compat
 # if you are treating the vm as cattle, you do not need qemu-guest-agent
 -qemu-guest-agent
+-cockpit
+-cockpit-bridge
+-cockpit-system
+-cockpit-ws
 %end
 
 %addon com_redhat_kdump --disable
