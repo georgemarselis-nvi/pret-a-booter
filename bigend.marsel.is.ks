@@ -24,11 +24,15 @@ sshkey --username=gmarselis "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIL5G39vHZAQFo6B
 
 %packages
 @^minimal-environment
+## add
 xauth
 vim-enhanced
 nginx
 dnsmasq
 tftp-server
+gnutls
+gnutls-utils
+## remove
 -polkit
 -polkit-pkla-compat
 # if you are treating the vm as cattle, you do not need qemu-guest-agent
