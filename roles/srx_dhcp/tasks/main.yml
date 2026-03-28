@@ -1,0 +1,25 @@
+# roles/srx_dhcp/tasks/main.yml
+- name: Configure DHCP on SRX 345
+  junipernetworks.junos.junos_config:
+    lines:
+      # Static binding for bigend
+      - set access address-assignment pool LAN-POOL family inet host bigend hardware-address de:ad:be:ef:ca:fe
+      - set access address-assignment pool LAN-POOL family inet host bigend ip-address 10.0.0.4
+
+      # DHCP pool
+      - set access address-assignment pool LAN-POOL family inet network 10.0.0.0/24
+      - set access address-assignment pool LAN-POOL family inet range DYNAMIC-RANGE low 10.0.0.10
+      - set access address-assignment pool LAN-POOL family inet range DYNAMIC-RANGE high 10.0.0.254
+      - set access address-assignment pool LAN-POOL family inet dhcp-attributes router 10.0.0.1
+      - set access address-assignment pool LAN-POOL family inet dhcp-attributes name-server [ 1.1.1.1 8.8.8.8 ]
+      - set access address-assignment pool LAN-POOL family inet dhcp-attributes lease-time 86400
+
+      # PXE options
+      - set access address-assignment pool LAN-POOL family inet dhcp-attributes tftp-server 10.0.0.4
+      - set access address-assignment pool LAN-POOL family inet dhcp-attributes boot-file bootx64.efi
+
+      # DHCP local server on the LAN interface
+      - set system services dhcp-local-server group LAN interface ge-0/0/0.0
+
+    comment: "PXE DHCP pool with options 66/67"
+    confirm: 1

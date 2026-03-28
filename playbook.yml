@@ -1,0 +1,12 @@
+# playbook.yml
+#
+# BEFORE RUNNING - edit the following:
+#   roles/srx_dhcp/tasks/main.yml:
+#     - hardware-address de:ad:be:ef:ca:fe  → bigend's actual MAC
+#     - interface ge-0/0/0.0               → actual LAN-facing interface on the SRX
+#   inventory/hosts.yml:
+#     - ansible_host: 10.0.0.1             → actual SRX management IP if different
+
+- hosts: srx345
+  roles:
+    - srx_dhcp
