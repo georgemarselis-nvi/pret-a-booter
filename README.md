@@ -14,7 +14,7 @@ machine that network boots - server or desktop, bare metal or VM.
   only answers PXE boot option requests
 - GRUB2 EFI served over TFTP for UEFI clients
 - nginx serves kickstart files only, blank response for everything else
-- AlmaLinux 9 kernel and initrd extracted from the upstream boot ISO
+- AlmaLinux 9 kernel and initrd downloaded from repo
 - Kickstart handles unattended install, user setup and post-install configuration
 
 ## Requirements
