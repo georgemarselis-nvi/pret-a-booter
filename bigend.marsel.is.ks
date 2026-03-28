@@ -51,14 +51,18 @@ gnutls-utils
 
 %post
 echo "%wheel ALL=(ALL) NOPASSWD: ALL" > /etc/sudoers.d/gmarselis
+# enable services
 systemctl enable nginx.service
 systemctl enable certmonger.service
 systemctl enable dnsmasq.service
 systemctl enable tftp.socket
+# disable services
+systemctl disable fwupd.service
+systemctl mask fwupd.service
 hostnamectl --static bigend.marsel.is
 hostnamectl --pretty bigend
-dnf remove --yes sssd sssd-common sssd-client
-dnf remove --yes iwl100-firmware iwl1000-firmware iwl105-firmware iwl135-firmware iwl2000-firmware iwl2030-firmware iwl3160-firmware iwl5000-firmware iwl5150-firmware iwl6000g2a-firmware iwl6050-firmware iwl7260-firmware
+dnf remove -y sssd sssd-common sssd-client
+dnf remove -y iwl100-firmware iwl1000-firmware iwl105-firmware iwl135-firmware iwl2000-firmware iwl2030-firmware iwl3160-firmware iwl5000-firmware iwl5150-firmware iwl6000g2a-firmware iwl6050-firmware iwl7260-firmware
 # anaconda does not know about epel-release. If you need it, put it here
 # declaring it in %packages will hang the installation.
 # Needed for several of the packages that follow it.
