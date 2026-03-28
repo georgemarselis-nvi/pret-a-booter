@@ -74,18 +74,32 @@ dnf install -y epel-release
 ## fail2ban-selinux.noarch pulls policycoreutils-python-utils
 dnf install -y fail2ban.noarch fail2ban-firewalld.noarch fail2ban-mail.noarch fail2ban-selinux.noarch fail2ban-sendmail.noarch fail2ban-server.noarch fail2ban-systemd.noarch fail2ban-tests.noarch
 systemctl enable fail2ban.service
-#
-# cleanup: firewall-cmd goes through the deamon, but the environemnt
+
+
+## firewall
+# add
+firewall-offline-cmd --add-service=tftp
+# remove
+# firewall-cmd goes through the deamon, but the environemnt
 # is chrooted. firewall-offline-cmd edits the xml directly
-# cleanup: the cockpit package leaves a hole in the firewall
+#
+# the cockpit package leaves a hole in the firewall
 firewall-offline-cmd --remove-service=cockpit
-# cleanup: no DHCPv6 on the segment
+# no DHCPv6 on the segment
 firewall-offline-cmd --remove-service=dhcpv6-client
-# cleanup: we do not need the anaconda cfg files
+
+#
+## cleanup
+#
+# we do not need the anaconda cfg files
 rm -f /root/anaconda-ks.cfg
 # /root/original-ks.cfg gets written way past %end, so it will remain even if we remove it here.
+#
+# anaconda leaves /var/log/anaconda after install, we do not need it
+rm -rf /var/log/anaconda
 
-# last upgrade
+#
+# The Last Upgrade
 dnf upgrade -y --refresh
 
 %end
