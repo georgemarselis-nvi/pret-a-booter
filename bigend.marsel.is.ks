@@ -15,7 +15,7 @@ zerombr
 clearpart --all --initlabel --disklabel=gpt
 part /boot/efi --fstype=efi --size=1024
 part /boot --fstype=xfs --size=2048
-part swap --size=4096
+part swap --size=1024
 part / --fstype=xfs --grow
 
 rootpw --lock
@@ -92,15 +92,36 @@ firewall-offline-cmd --remove-service=dhcpv6-client
 ## cleanup
 #
 # we do not need the anaconda cfg files
-rm -f /root/anaconda-ks.cfg
+#rm -f /root/anaconda-ks.cfg
+#
+## one shot deletetion after boot
 # /root/original-ks.cfg gets written way past %end, so it will remain even if we remove it here.
 #
 # anaconda leaves /var/log/anaconda after install, we do not need it
-rm -rf /var/log/anaconda
+#rm -rf /var/log/anaconda
+cat > /etc/systemd/system/cleanup-install.service << 'EOF'
+[Unit]
+Description=Remove anaconda installation artifacts
+After=multi-user.target
+
+[Service]
+Type=oneshot
+ExecStart=/usr/bin/rm -rf /var/log/anaconda
+ExecStart=/usr/bin/rm -f /root/anaconda-ks.cfg /root/original-ks.cfg
+ExecStartPost=/usr/bin/systemctl disable cleanup-install.service
+ExecStartPost=/usr/bin/rm -f /etc/systemd/system/cleanup-install.service
+
+[Install]
+WantedBy=multi-user.target
+EOF
+
+systemctl enable cleanup-install.service
 
 #
 # The Last Upgrade
 dnf upgrade -y --refresh
+
+
 
 %end
 
