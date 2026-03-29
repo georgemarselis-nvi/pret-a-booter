@@ -117,6 +117,17 @@ EOF
 
 systemctl enable cleanup-install.service
 
+###################################################################################################
+# Configuraiton
+#   This eventually will run in Ansible
+###################################################################################################
+#
+# SSHd: allow logins exclusively by openssh public key
+sed -i 's/^#*PasswordAuthentication.*/PasswordAuthentication no/'      /etc/ssh/sshd_config    # disable password   auth
+sed -i 's/^#*PubkeyAuthentication.*/PubkeyAuthentication yes/'         /etc/ssh/sshd_config    # enable  public key auth
+sed -i 's/^#*AuthenticationMethods.*/AuthenticationMethods publickey/' /etc/ssh/sshd_config    # enable  public key auth only
+sed -i 's/^#*GSSAPIAuthentication.*/GSSAPIAuthentication no/'          /etc/ssh/sshd_config    # disable kerberos   auth
+
 #
 # The Last Upgrade
 dnf upgrade -y --refresh
