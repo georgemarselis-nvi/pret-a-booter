@@ -8,7 +8,7 @@ lang en_US.UTF-8
 keyboard us
 timezone Europe/Oslo --utc
 
-network --bootproto=static --ip=10.0.0.4 --netmask=255.255.255.0 --gateway=10.0.0.138 --nameserver=1.1.1.1 --hostname=bigend.marsel.is
+network --bootproto=static --ip=10.0.0.6 --netmask=255.255.255.0 --gateway=10.0.0.138 --nameserver=1.1.1.1 --hostname=openldap.marsel.is
 
 bootloader --timeout=1
 zerombr
@@ -27,12 +27,12 @@ sshkey --username=gmarselis "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIL5G39vHZAQFo6B
 ## add
 xauth
 vim-enhanced
-nginx
 certmonger
+openldap
+openldap-servers
+openldap-clients
 # certbot does what certmonger does manually. not sure if i need it, adding it for now
 ## certbot
-dnsmasq
-tftp-server
 gnutls
 gnutls-utils
 ## remove
@@ -78,7 +78,6 @@ systemctl enable fail2ban.service
 
 ## firewall
 # add
-firewall-offline-cmd --add-service=tftp
 # remove
 # firewall-cmd goes through the deamon, but the environemnt
 # is chrooted. firewall-offline-cmd edits the xml directly

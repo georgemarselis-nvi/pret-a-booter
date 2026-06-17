@@ -8,7 +8,7 @@ lang en_US.UTF-8
 keyboard us
 timezone Europe/Oslo --utc
 
-network --bootproto=static --ip=10.0.0.4 --netmask=255.255.255.0 --gateway=10.0.0.138 --nameserver=1.1.1.1 --hostname=bigend.marsel.is
+network --bootproto=static --ip=10.0.0.5 --netmask=255.255.255.0 --gateway=10.0.0.138 --nameserver=1.1.1.1 --hostname=postgresql.marsel.is
 
 bootloader --timeout=1
 zerombr
@@ -27,12 +27,11 @@ sshkey --username=gmarselis "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIL5G39vHZAQFo6B
 ## add
 xauth
 vim-enhanced
-nginx
 certmonger
+postgresql-server
+postgresql
 # certbot does what certmonger does manually. not sure if i need it, adding it for now
 ## certbot
-dnsmasq
-tftp-server
 gnutls
 gnutls-utils
 ## remove
@@ -52,15 +51,14 @@ gnutls-utils
 %post
 echo "%wheel ALL=(ALL) NOPASSWD: ALL" > /etc/sudoers.d/gmarselis
 # enable services
-systemctl enable nginx.service
 systemctl enable certmonger.service
-systemctl enable dnsmasq.service
-systemctl enable tftp.socket
+postgresql-setup --initdb
+systemctl enable postgresql
 # disable services
 systemctl disable fwupd.service
 systemctl mask fwupd.service
-hostnamectl --static bigend.marsel.is
-hostnamectl --pretty bigend
+hostnamectl --static postgresql.marsel.is
+hostnamectl --pretty postgresql
 dnf remove -y sssd sssd-common sssd-client
 dnf remove -y iwl100-firmware iwl1000-firmware iwl105-firmware iwl135-firmware iwl2000-firmware iwl2030-firmware iwl3160-firmware iwl5000-firmware iwl5150-firmware iwl6000g2a-firmware iwl6050-firmware iwl7260-firmware
 # anaconda does not know about epel-release. If you need it, put it here
@@ -78,7 +76,6 @@ systemctl enable fail2ban.service
 
 ## firewall
 # add
-firewall-offline-cmd --add-service=tftp
 # remove
 # firewall-cmd goes through the deamon, but the environemnt
 # is chrooted. firewall-offline-cmd edits the xml directly
