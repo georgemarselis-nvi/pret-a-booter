@@ -52,7 +52,7 @@ gnutls-utils
 echo "%wheel ALL=(ALL) NOPASSWD: ALL" > /etc/sudoers.d/gmarselis
 # enable services
 systemctl enable certmonger.service
-postgresql-setup --initdb
+/usr/bin/postgresql-setup --initdb
 systemctl enable postgresql
 # disable services
 systemctl disable fwupd.service
