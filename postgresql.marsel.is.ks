@@ -125,6 +125,12 @@ sed -i 's/^#*PubkeyAuthentication.*/PubkeyAuthentication yes/'         /etc/ssh/
 sed -i 's/^#*AuthenticationMethods.*/AuthenticationMethods publickey/' /etc/ssh/sshd_config    # enable  public key auth only
 sed -i 's/^#*GSSAPIAuthentication.*/GSSAPIAuthentication no/'          /etc/ssh/sshd_config    # disable kerberos   auth
 
+# postgresql: more secure settings
+sed -i "s/#password_encryption = md5/password_encryption = scram-sha-256/" /var/lib/pgsql/data/postgresql.conf
+sed -i 's/md5/scram-sha-256/g' /var/lib/pgsql/data/pg_hba.conf
+IP=$(ip -4 addr show scope global | awk '/inet/{print $2}' | cut -d/ -f1)
+sed -i "s/#listen_addresses = 'localhost'/listen_addresses = '$IP'/" /var/lib/pgsql/data/postgresql.conf
+
 #
 # The Last Upgrade
 dnf upgrade -y --refresh
