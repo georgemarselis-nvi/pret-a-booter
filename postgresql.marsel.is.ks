@@ -49,17 +49,18 @@ gnutls-utils
 %end
 
 %post
+#set -x
 echo "%wheel ALL=(ALL) NOPASSWD: ALL" > /etc/sudoers.d/gmarselis
 # enable services
+hostnamectl --static postgresql.marsel.is
+hostnamectl --pretty postgresql
 systemctl enable certmonger.service
-/usr/bin/postgresql-setup --initdb
+/usr/bin/su -l postgres -c "/usr/bin/initdb -D /var/lib/pgsql/data"
 systemctl enable postgresql
 # disable services
 systemctl disable fwupd.service
 systemctl mask fwupd.service
-hostnamectl --static postgresql.marsel.is
-hostnamectl --pretty postgresql
-dnf remove -y sssd sssd-common sssd-client
+nf remove -y sssd sssd-common sssd-client
 dnf remove -y iwl100-firmware iwl1000-firmware iwl105-firmware iwl135-firmware iwl2000-firmware iwl2030-firmware iwl3160-firmware iwl5000-firmware iwl5150-firmware iwl6000g2a-firmware iwl6050-firmware iwl7260-firmware
 # anaconda does not know about epel-release. If you need it, put it here
 # declaring it in %packages will hang the installation.
@@ -85,17 +86,16 @@ firewall-offline-cmd --remove-service=cockpit
 # no DHCPv6 on the segment
 firewall-offline-cmd --remove-service=dhcpv6-client
 
-#
+
 ## cleanup
-#
+
 # we do not need the anaconda cfg files
-#rm -f /root/anaconda-ks.cfg
+rm -f /root/anaconda-ks.cfg
 #
 ## one shot deletetion after boot
 # /root/original-ks.cfg gets written way past %end, so it will remain even if we remove it here.
 #
 # anaconda leaves /var/log/anaconda after install, we do not need it
-#rm -rf /var/log/anaconda
 cat > /etc/systemd/system/cleanup-install.service << 'EOF'
 [Unit]
 Description=Remove anaconda installation artifacts
