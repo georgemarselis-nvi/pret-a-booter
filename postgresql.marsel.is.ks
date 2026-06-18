@@ -52,45 +52,45 @@ gnutls-utils
 #set -x
 echo "%wheel ALL=(ALL) NOPASSWD: ALL" > /etc/sudoers.d/gmarselis
 # enable services
-hostnamectl --static postgresql.marsel.is
-hostnamectl --pretty postgresql
-systemctl enable certmonger.service
+/usr/bin/hostnamectl --static postgresql.marsel.is
+/usr/bin/hostnamectl --pretty postgresql
+/usr/bin/systemctl enable certmonger.service
 /usr/bin/su -l postgres -c "/usr/bin/initdb -D /var/lib/pgsql/data"
-systemctl enable postgresql
+/usr/bin/systemctl enable postgresql
 # disable services
-systemctl disable fwupd.service
-systemctl mask fwupd.service
-nf remove -y sssd sssd-common sssd-client
-dnf remove -y iwl100-firmware iwl1000-firmware iwl105-firmware iwl135-firmware iwl2000-firmware iwl2030-firmware iwl3160-firmware iwl5000-firmware iwl5150-firmware iwl6000g2a-firmware iwl6050-firmware iwl7260-firmware
+/usr/bin/systemctl disable fwupd.service
+/usr/bin/systemctl mask fwupd.service
+/usr/bin/dnf remove -y sssd sssd-common sssd-client
+/usr/bin/dnf remove -y iwl100-firmware iwl1000-firmware iwl105-firmware iwl135-firmware iwl2000-firmware iwl2030-firmware iwl3160-firmware iwl5000-firmware iwl5150-firmware iwl6000g2a-firmware iwl6050-firmware iwl7260-firmware
 # anaconda does not know about epel-release. If you need it, put it here
 # declaring it in %packages will hang the installation.
 # Needed for several of the packages that follow it.
-dnf install -y epel-release
+/usr/bin/dnf install -y epel-release
 # if you need /usr/bin/audit2allow:
-## dnf install -y policycoreutils-python-utils
+## /usr/bin/dnf install -y policycoreutils-python-utils
 #
 # fail2ban
 ## fail2ban-selinux.noarch pulls policycoreutils-python-utils
-dnf install -y fail2ban.noarch fail2ban-firewalld.noarch fail2ban-mail.noarch fail2ban-selinux.noarch fail2ban-sendmail.noarch fail2ban-server.noarch fail2ban-systemd.noarch fail2ban-tests.noarch
-systemctl enable fail2ban.service
+/usr/bin/dnf install -y fail2ban.noarch fail2ban-firewalld.noarch fail2ban-mail.noarch fail2ban-selinux.noarch fail2ban-sendmail.noarch fail2ban-server.noarch fail2ban-systemd.noarch fail2ban-tests.noarch
+/usr/bin/systemctl enable fail2ban.service
 
 
 ## firewall
 # add
 # remove
 # firewall-cmd goes through the deamon, but the environemnt
-# is chrooted. firewall-offline-cmd edits the xml directly
+# is chrooted. /usr/bin/firewall-offline-cmd edits the xml directly
 #
 # the cockpit package leaves a hole in the firewall
-firewall-offline-cmd --remove-service=cockpit
+/usr/bin/firewall-offline-cmd --remove-service=cockpit
 # no DHCPv6 on the segment
-firewall-offline-cmd --remove-service=dhcpv6-client
+/usr/bin/firewall-offline-cmd --remove-service=dhcpv6-client
 
 
 ## cleanup
 
 # we do not need the anaconda cfg files
-rm -f /root/anaconda-ks.cfg
+/usr/bin/rm -f /root/anaconda-ks.cfg
 #
 ## one shot deletetion after boot
 # /root/original-ks.cfg gets written way past %end, so it will remain even if we remove it here.
@@ -112,7 +112,7 @@ ExecStartPost=/usr/bin/rm -f /etc/systemd/system/cleanup-install.service
 WantedBy=multi-user.target
 EOF
 
-systemctl enable cleanup-install.service
+/usr/bin/systemctl enable cleanup-install.service
 
 ###################################################################################################
 # Configuraiton
@@ -120,20 +120,23 @@ systemctl enable cleanup-install.service
 ###################################################################################################
 #
 # SSHd: allow logins exclusively by openssh public key
-sed -i 's/^#*PasswordAuthentication.*/PasswordAuthentication no/'      /etc/ssh/sshd_config    # disable password   auth
-sed -i 's/^#*PubkeyAuthentication.*/PubkeyAuthentication yes/'         /etc/ssh/sshd_config    # enable  public key auth
-sed -i 's/^#*AuthenticationMethods.*/AuthenticationMethods publickey/' /etc/ssh/sshd_config    # enable  public key auth only
-sed -i 's/^#*GSSAPIAuthentication.*/GSSAPIAuthentication no/'          /etc/ssh/sshd_config    # disable kerberos   auth
+/usr/bin/sed -i 's/^#*PasswordAuthentication.*/PasswordAuthentication no/'      /etc/ssh/sshd_config    # disable password   auth
+/usr/bin/sed -i 's/^#*PubkeyAuthentication.*/PubkeyAuthentication yes/'         /etc/ssh/sshd_config    # enable  public key auth
+/usr/bin/sed -i 's/^#*AuthenticationMethods.*/AuthenticationMethods publickey/' /etc/ssh/sshd_config    # enable  public key auth only
+/usr/bin/sed -i 's/^#*GSSAPIAuthentication.*/GSSAPIAuthentication no/'          /etc/ssh/sshd_config    # disable kerberos   auth
 
 # postgresql: more secure settings
-sed -i "s/#password_encryption = md5/password_encryption = scram-sha-256/" /var/lib/pgsql/data/postgresql.conf
-sed -i 's/md5/scram-sha-256/g' /var/lib/pgsql/data/pg_hba.conf
+/usr/bin/sed -i "s/#password_encryption = md5/password_encryption = scram-sha-256/" /var/lib/pgsql/data/postgresql.conf
+/usr/bin/sed -i 's/md5/scram-sha-256/g' /var/lib/pgsql/data/pg_hba.conf
 IP=$(ip -4 addr show scope global | awk '/inet/{print $2}' | cut -d/ -f1)
-sed -i "s/#listen_addresses = 'localhost'/listen_addresses = '$IP'/" /var/lib/pgsql/data/postgresql.conf
+/usr/bin/sed -i "s/#listen_addresses = 'localhost'/listen_addresses = '$IP'/" /var/lib/pgsql/data/postgresql.conf
+echo "host slapd slapd 10.0.0.6/32 scram-sha-256" >> /var/lib/pgsql/data/pg_hba.conf
+/usr/bin/su -l postgres -c "/usr/bin/createuser --no-superuser --no-createdb --no-createrole slapd"
+/usr/bin/su -l postgres -c "/usr/bin/createdb -O slapd slapd"
 
 #
 # The Last Upgrade
-dnf upgrade -y --refresh
+/usr/bin/dnf upgrade -y --refresh
 
 
 
