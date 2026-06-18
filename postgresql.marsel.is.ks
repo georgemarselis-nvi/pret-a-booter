@@ -131,8 +131,11 @@ EOF
 IP=$(ip -4 addr show scope global | awk '/inet/{print $2}' | cut -d/ -f1)
 /usr/bin/sed -i "s/#listen_addresses = 'localhost'/listen_addresses = '$IP'/" /var/lib/pgsql/data/postgresql.conf
 echo "host slapd slapd 10.0.0.6/32 scram-sha-256" >> /var/lib/pgsql/data/pg_hba.conf
+# systemd is not running, so no using systemctl
+/usr/bin/su -l postgres -c "/usr/bin/pg_ctl -D /var/lib/pgsql/data start"
 /usr/bin/su -l postgres -c "/usr/bin/createuser --no-superuser --no-createdb --no-createrole slapd"
 /usr/bin/su -l postgres -c "/usr/bin/createdb -O slapd slapd"
+/usr/bin/su -l postgres -c "/usr/bin/pg_ctl -D /var/lib/pgsql/data stop"
 
 #
 # The Last Upgrade
