@@ -32,6 +32,7 @@ openldap
 openldap-clients
 unixODBC
 postgresql-odbc
+
 # certbot does what certmonger does manually. not sure if i need it, adding it for now
 ## certbot
 gnutls
@@ -57,7 +58,6 @@ echo "%wheel ALL=(ALL) NOPASSWD: ALL" > /etc/sudoers.d/gmarselis
 /usr/bin/hostnamectl --pretty ldap
 # enable services
 /usr/bin/systemctl enable certmonger.service
-/usr/bin/systemctl enable slapd
 # disable services
 /usr/bin/systemctl disable fwupd.service
 /usr/bin/systemctl mask fwupd.service
@@ -135,7 +135,8 @@ EOF
 /usr/bin/dnf install -y ncdu
 /usr/bin/dnf install -y openldap-servers-sql
 /usr/bin/dnf install -y openldap-servers
-
+# we need to enable this after the server is installed, of course
+/usr/bin/systemctl enable slapd.service
 
 %end
 
