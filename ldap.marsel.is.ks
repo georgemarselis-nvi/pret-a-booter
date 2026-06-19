@@ -8,7 +8,7 @@ lang en_US.UTF-8
 keyboard us
 timezone Europe/Oslo --utc
 
-network --bootproto=static --ip=10.0.0.6 --netmask=255.255.255.0 --gateway=10.0.0.138 --nameserver=1.1.1.1 --hostname=openldap.marsel.is
+network --bootproto=static --ip=10.0.0.6 --netmask=255.255.255.0 --gateway=10.0.0.138 --nameserver=1.1.1.1 --hostname=ldap.marsel.is
 
 bootloader --timeout=1
 zerombr
@@ -26,6 +26,7 @@ sshkey --username=gmarselis "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIL5G39vHZAQFo6B
 @^minimal-environment
 ## add
 xauth
+ncdu
 vim-enhanced
 certmonger
 openldap

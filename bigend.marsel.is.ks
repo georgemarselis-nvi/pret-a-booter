@@ -26,6 +26,7 @@ sshkey --username=gmarselis "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIL5G39vHZAQFo6B
 @^minimal-environment
 ## add
 xauth
+ncdu
 vim-enhanced
 nginx
 certmonger
