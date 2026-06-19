@@ -2,10 +2,18 @@
 
 virsh destroy bigend.marsel.is; virsh undefine bigend.marsel.is --remove-all-storage --nvram
 
+ssh-keygen -R ldap.marsel.is; ssh-keygen -R 10.0.0.4; ssh -o StrictHostKeyChecking=accept-new b.m
+
+###############################################################################################################################################
 /usr/bin/time /usr/bin/virt-install --name postgresql.marsel.is --memory 4096 --vcpus 2 --disk pool=default,size=20,format=qcow2 --location /var/lib/libvirt/iso/AlmaLinux-9.7-x86_64-boot.iso --os-variant almalinux9 --boot uefi --network bridge=br-eno2,model=e1000 --graphics none --console pty,target_type=serial --initrd-inject /home/gmarselis/src/kickstart/postgresql.marsel.is.ks --extra-args="console=ttyS0,115200n8 inst.ks=file:///postgresql.marsel.is.ks inst.repo=https://repo.almalinux.org/almalinux/9/BaseOS/x86_64/os/ ip=10.0.0.5::10.0.0.138:255.255.255.0:postgresql.marsel.is:ens1:none nameserver=1.1.1.1 rd.neednet=1" --wait=-1
 
 virsh destroy postgresql.marsel.is; virsh undefine postgresql.marsel.is --remove-all-storage --nvram
 
-/usr/bin/time /usr/bin/virt-install --name ldap.marsel.is --memory 4096 --vcpus 2 --disk pool=default,size=20,format=qcow2 --location /var/lib/libvirt/iso/AlmaLinux-9.7-x86_64-boot.iso --os-variant almalinux9 --boot uefi --network bridge=br-eno2,model=e1000 --graphics none --console pty,target_type=serial --initrd-inject /home/gmarselis/src/kickstart/ldap.marsel.is.ks --extra-args="console=ttyS0,115200n8 inst.ks=file:///ldap.marsel.is.ks inst.repo=https://repo.almalinux.org/almalinux/9/BaseOS/x86_64/os/ ip=10.0.0.6::10.0.0.138:255.255.255.0:ldap.marsel.is:ens1:none nameserver=1.1.1.1 rd.neednet=1" --wait=-1
+ssh-keygen -R postgresql.marsel.is; ssh-keygen -R 10.0.0.5; ssh -o StrictHostKeyChecking=accept-new p.m
+
+###############################################################################################################################################
+/usr/bin/time /usr/bin/virt-install --name ldap.marsel.is --memory 4096 --vcpus 2 --disk pool=default,size=20,format=qcow2 --location /var/lib/libvirt/iso/AlmaLinux-9.7-x86_64-boot.iso --os-variant almalinux9 --boot uefi --network bridge=br-eno2,model=e1000 --graphics none --console pty,target_type=serial --initrd-inject /home/gmarselis/src/kickstart/ldap.marsel.is.ks --extra-args="console=ttyS0,115200n8 inst.ks=file:///ldap.marsel.is.ks inst.repo=https://repo.almalinux.org/almalinux/9/BaseOS/x86_64/os/ inst.addrepo=AppStream,https://repo.almalinux.org/almalinux/9/AppStream/x86_64/os/ ip=10.0.0.6::10.0.0.138:255.255.255.0:ldap.marsel.is:ens1:none nameserver=1.1.1.1 rd.neednet=1" --wait=-1
 
 virsh destroy ldap.marsel.is; virsh undefine ldap.marsel.is --remove-all-storage --nvram
+
+ssh-keygen -R ldap.marsel.is; ssh-keygen -R 10.0.0.6; ssh -o StrictHostKeyChecking=accept-new l.m
