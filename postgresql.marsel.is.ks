@@ -90,27 +90,27 @@ echo "%wheel ALL=(ALL) NOPASSWD: ALL" > /etc/sudoers.d/gmarselis
 ## cleanup
 
 # we do not need the anaconda cfg files
-/usr/bin/rm -f /root/anaconda-ks.cfg
+#/usr/bin/rm -f /root/anaconda-ks.cfg
 #
 ## one shot deletetion after boot
 # /root/original-ks.cfg gets written way past %end, so it will remain even if we remove it here.
 #
 # anaconda leaves /var/log/anaconda after install, we do not need it
-cat > /etc/systemd/system/cleanup-install.service << 'EOF'
-[Unit]
-Description=Remove anaconda installation artifacts
-After=multi-user.target
-
-[Service]
-Type=oneshot
-ExecStart=/usr/bin/rm -rf /var/log/anaconda
-ExecStart=/usr/bin/rm -f /root/anaconda-ks.cfg /root/original-ks.cfg
-ExecStartPost=/usr/bin/systemctl disable cleanup-install.service
-ExecStartPost=/usr/bin/rm -f /etc/systemd/system/cleanup-install.service
-
-[Install]
-WantedBy=multi-user.target
-EOF
+#cat > /etc/systemd/system/cleanup-install.service << 'EOF'
+#[Unit]
+#Description=Remove anaconda installation artifacts
+#After=multi-user.target
+#
+#[Service]
+#Type=oneshot
+#ExecStart=/usr/bin/rm -rf /var/log/anaconda
+#ExecStart=/usr/bin/rm -f /root/anaconda-ks.cfg /root/original-ks.cfg
+#ExecStartPost=/usr/bin/systemctl disable cleanup-install.service
+#ExecStartPost=/usr/bin/rm -f /etc/systemd/system/cleanup-install.service
+#
+#[Install]
+#WantedBy=multi-user.target
+#EOF
 
 /usr/bin/systemctl enable cleanup-install.service
 
