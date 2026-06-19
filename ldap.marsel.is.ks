@@ -26,12 +26,12 @@ sshkey --username=gmarselis "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIL5G39vHZAQFo6B
 @^minimal-environment
 ## add
 xauth
-ncdu
 vim-enhanced
 certmonger
 openldap
-openldap-servers
 openldap-clients
+unixODBC
+postgresql-odbc
 # certbot does what certmonger does manually. not sure if i need it, adding it for now
 ## certbot
 gnutls
@@ -52,41 +52,40 @@ gnutls-utils
 
 %post
 echo "%wheel ALL=(ALL) NOPASSWD: ALL" > /etc/sudoers.d/gmarselis
+# make sure the machine is named before anything else
+/usr/bin/hostnamectl --static ldap.marsel.is
+/usr/bin/hostnamectl --pretty ldap
 # enable services
-systemctl enable nginx.service
-systemctl enable certmonger.service
-systemctl enable dnsmasq.service
-systemctl enable tftp.socket
+/usr/bin/systemctl enable certmonger.service
+/usr/bin/systemctl enable slapd
 # disable services
-systemctl disable fwupd.service
-systemctl mask fwupd.service
-hostnamectl --static bigend.marsel.is
-hostnamectl --pretty bigend
-dnf remove -y sssd sssd-common sssd-client
-dnf remove -y iwl100-firmware iwl1000-firmware iwl105-firmware iwl135-firmware iwl2000-firmware iwl2030-firmware iwl3160-firmware iwl5000-firmware iwl5150-firmware iwl6000g2a-firmware iwl6050-firmware iwl7260-firmware
+/usr/bin/systemctl disable fwupd.service
+/usr/bin/systemctl mask fwupd.service
+/usr/bin/dnf remove -y sssd sssd-common sssd-client
+/usr/bin/dnf remove -y iwl100-firmware iwl1000-firmware iwl105-firmware iwl135-firmware iwl2000-firmware iwl2030-firmware iwl3160-firmware iwl5000-firmware iwl5150-firmware iwl6000g2a-firmware iwl6050-firmware iwl7260-firmware
 # anaconda does not know about epel-release. If you need it, put it here
 # declaring it in %packages will hang the installation.
 # Needed for several of the packages that follow it.
-dnf install -y epel-release
+/usr/bin/dnf install -y epel-release
 # if you need /usr/bin/audit2allow:
-## dnf install -y policycoreutils-python-utils
+## /usr/bin/dnf install -y policycoreutils-python-utils
 #
 # fail2ban
 ## fail2ban-selinux.noarch pulls policycoreutils-python-utils
-dnf install -y fail2ban.noarch fail2ban-firewalld.noarch fail2ban-mail.noarch fail2ban-selinux.noarch fail2ban-sendmail.noarch fail2ban-server.noarch fail2ban-systemd.noarch fail2ban-tests.noarch
-systemctl enable fail2ban.service
+/usr/bin/dnf install -y fail2ban.noarch fail2ban-firewalld.noarch fail2ban-mail.noarch fail2ban-selinux.noarch fail2ban-sendmail.noarch fail2ban-server.noarch fail2ban-systemd.noarch fail2ban-tests.noarch
+/usr/bin/systemctl enable fail2ban.service
 
 
 ## firewall
 # add
 # remove
 # firewall-cmd goes through the deamon, but the environemnt
-# is chrooted. firewall-offline-cmd edits the xml directly
+# is chrooted. /usr/bin/firewall-offline-cmd edits the xml directly
 #
 # the cockpit package leaves a hole in the firewall
-firewall-offline-cmd --remove-service=cockpit
+/usr/bin/firewall-offline-cmd --remove-service=cockpit
 # no DHCPv6 on the segment
-firewall-offline-cmd --remove-service=dhcpv6-client
+/usr/bin/firewall-offline-cmd --remove-service=dhcpv6-client
 
 #
 ## cleanup
@@ -99,7 +98,7 @@ firewall-offline-cmd --remove-service=dhcpv6-client
 #
 # anaconda leaves /var/log/anaconda after install, we do not need it
 #rm -rf /var/log/anaconda
-cat > /etc/systemd/system/cleanup-install.service << 'EOF'
+/usr/bin/cat > /etc/systemd/system/cleanup-install.service << 'EOF'
 [Unit]
 Description=Remove anaconda installation artifacts
 After=multi-user.target
@@ -115,23 +114,27 @@ ExecStartPost=/usr/bin/rm -f /etc/systemd/system/cleanup-install.service
 WantedBy=multi-user.target
 EOF
 
-systemctl enable cleanup-install.service
+/usr/bin/systemctl enable cleanup-install.service
 
 ###################################################################################################
-# Configuraiton
+# Configuration
 #   This eventually will run in Ansible
 ###################################################################################################
 #
 # SSHd: allow logins exclusively by openssh public key
-sed -i 's/^#*PasswordAuthentication.*/PasswordAuthentication no/'      /etc/ssh/sshd_config    # disable password   auth
-sed -i 's/^#*PubkeyAuthentication.*/PubkeyAuthentication yes/'         /etc/ssh/sshd_config    # enable  public key auth
-sed -i 's/^#*AuthenticationMethods.*/AuthenticationMethods publickey/' /etc/ssh/sshd_config    # enable  public key auth only
-sed -i 's/^#*GSSAPIAuthentication.*/GSSAPIAuthentication no/'          /etc/ssh/sshd_config    # disable kerberos   auth
+/usr/bin/sed -i 's/^#*PasswordAuthentication.*/PasswordAuthentication no/'      /etc/ssh/sshd_config    # disable password   auth
+/usr/bin/sed -i 's/^#*PubkeyAuthentication.*/PubkeyAuthentication yes/'         /etc/ssh/sshd_config    # enable  public key auth
+/usr/bin/sed -i 's/^#*AuthenticationMethods.*/AuthenticationMethods publickey/' /etc/ssh/sshd_config    # enable  public key auth only
+/usr/bin/sed -i 's/^#*GSSAPIAuthentication.*/GSSAPIAuthentication no/'          /etc/ssh/sshd_config    # disable kerberos   auth
 
 #
 # The Last Upgrade
-dnf upgrade -y --refresh
+/usr/bin/dnf upgrade -y --refresh
 
+# install epel-release packages that could not be installed before the repo was configured
+/usr/bin/dnf install -y ncdu
+/usr/bin/dnf install -y openldap-servers-sql
+/usr/bin/dnf install -y openldap-servers
 
 
 %end
