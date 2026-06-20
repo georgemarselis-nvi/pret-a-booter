@@ -17,3 +17,11 @@ ssh-keygen -R postgresql.marsel.is; ssh-keygen -R 10.0.0.5; ssh -o StrictHostKey
 virsh destroy ldap.marsel.is; virsh undefine ldap.marsel.is --remove-all-storage --nvram
 
 ssh-keygen -R ldap.marsel.is; ssh-keygen -R 10.0.0.6; ssh -o StrictHostKeyChecking=accept-new l.m
+
+##########Same ldap host but debian############################################################################################################
+/usr/bin/time /usr/bin/virt-install --name ldap.marsel.is --memory 4096 --vcpus 2 --disk pool=default,size=20,format=qcow2 --location /var/lib/libvirt/iso/debian-13.4.0-amd64-netinst.iso --os-variant debian12 --boot uefi --network bridge=br-eno2,model=e1000 --graphics none --console pty,target_type=serial --initrd-inject /home/gmarselis/src/pret-a-booter/ldap.marsel.is.preseed.cfg --extra-args="console=ttyS0,115200n8 auto=true priority=critical preseed/file=/ldap.marsel.is.preseed.cfg" --wait=-1
+
+virsh destroy ldap.marsel.is; virsh undefine ldap.marsel.is --remove-all-storage --nvram
+
+ssh-keygen -R ldap.marsel.is; ssh-keygen -R 10.0.0.6; ssh -o StrictHostKeyChecking=accept-new l.m
+
