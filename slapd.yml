@@ -1,4 +1,4 @@
-# slapd.yml - Deploy slapd.conf to ldap.marsel.is
+# slapd.yml - Deploy slapd.conf and ldap.conf to ldap.marsel.is
 # Copyright (C) 2026 George Marselis
 #
 # This program is free software: you can redistribute it and/or modify
@@ -63,6 +63,25 @@
       ansible.builtin.fail:
         msg: "slapd.conf validation failed, rolled back to previous version"
       when: slaptest.rc != 0
+
+    - name: Backup ldap.conf
+      ansible.builtin.copy:
+        src: /etc/ldap/ldap.conf
+        dest: /etc/ldap/ldap.conf.orig
+        owner: root
+        group: root
+        mode: '0644'
+        remote_src: true
+      become: true
+
+    - name: Deploy ldap.conf
+      ansible.builtin.copy:
+        src: ldap.conf
+        dest: /etc/ldap/ldap.conf
+        owner: root
+        group: root
+        mode: '0644'
+      become: true
 
   handlers:
     - name: Restart slapd
