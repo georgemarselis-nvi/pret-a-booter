@@ -18,6 +18,8 @@
 ---
 - name: Deploy slapd configuration
   hosts: ldap
+  vars:
+    ansible_python_interpreter: /usr/bin/python3
   tasks:
     - name: Deploy slapd.conf
       ansible.builtin.copy:
