@@ -21,6 +21,16 @@
   vars:
     ansible_python_interpreter: /usr/bin/python3
   tasks:
+    - name: Backup slapd.conf
+      ansible.builtin.copy:
+        src: /etc/ldap/slapd.conf
+        dest: /etc/ldap/slapd.conf.orig
+        owner: root
+        group: openldap
+        mode: '0640'
+        remote_src: true
+      become: true
+
     - name: Deploy slapd.conf
       ansible.builtin.copy:
         src: slapd.conf
@@ -28,10 +38,35 @@
         owner: root
         group: openldap
         mode: '0640'
+      become: true
       notify: Restart slapd
+
+    - name: Validate slapd.conf
+      ansible.builtin.command: /usr/sbin/slaptest -v -f /etc/ldap/slapd.conf
+      register: slaptest
+      changed_when: false
+      failed_when: false
+      become: true
+
+    - name: Rollback slapd.conf on validation failure
+      ansible.builtin.copy:
+        src: /etc/ldap/slapd.conf.orig
+        dest: /etc/ldap/slapd.conf
+        owner: root
+        group: openldap
+        mode: '0640'
+        remote_src: true
+      become: true
+      when: slaptest.rc != 0
+
+    - name: Fail if slapd.conf validation failed
+      ansible.builtin.fail:
+        msg: "slapd.conf validation failed, rolled back to previous version"
+      when: slaptest.rc != 0
 
   handlers:
     - name: Restart slapd
       ansible.builtin.systemd:
         name: slapd
         state: restarted
+      become: true
