@@ -1,0 +1,2 @@
+[ldap]
+ldap.marsel.is ansible_user=gmarselis ansible_become=true
