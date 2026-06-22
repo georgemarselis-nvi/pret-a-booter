@@ -1,0 +1,17 @@
+[Unit]
+Description=OpenLDAP Server Daemon
+After=network.target
+Documentation=man:slapd
+Documentation=man:slapd-config
+Documentation=man:slapd-mdb
+
+[Service]
+Type=notify
+EnvironmentFile=/etc/default/slapd
+RuntimeDirectory=slapd
+RuntimeDirectoryMode=755
+PIDFile=/run/slapd/slapd.pid
+ExecStart=/usr/sbin/slapd -d0 -u openldap -g openldap -h "ldap:/// ldaps:/// ldapi:///" -f /etc/ldap/slapd.conf
+
+[Install]
+WantedBy=multi-user.target
