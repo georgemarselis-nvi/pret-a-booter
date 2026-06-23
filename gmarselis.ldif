@@ -1,0 +1,46 @@
+dn: dc=marsel,dc=is
+description: marsel.is - George Marselis lab infrastructure
+dc: marsel
+o: marsel.is
+objectClass: top
+objectClass: dcObject
+objectClass: organization
+
+dn: ou=users,dc=marsel,dc=is
+ou: users
+objectClass: top
+objectClass: organizationalUnit
+
+dn: ou=groups,dc=marsel,dc=is
+ou: groups
+objectClass: top
+objectClass: organizationalUnit
+
+dn: ou=services,dc=marsel,dc=is
+ou: services
+objectClass: top
+objectClass: organizationalUnit
+
+dn: uid=gmarselis,ou=users,dc=marsel,dc=is
+uid: gmarselis
+cn: Georgios Marselis
+givenName: Georgios
+sn: Marselis
+displayName: Georgios Marselis
+mail: gmarselis@marsel.is
+mail: george.marselis@nvi.no
+l: Ås
+st: Akershus
+c: NO
+postalCode: 1430
+street: Ullevålsveien 68
+o: Norsk Veterinærinstituttet
+ou: ITK 104
+title: Seniorrådgiver
+telephoneNumber: +47
+labeledURI: https://github.com/georgemarselis-nvi
+preferredLanguage: en
+objectClass: top
+objectClass: person
+objectClass: organizationalPerson
+objectClass: inetOrgPerson

@@ -1,0 +1,7 @@
+dn: uid=bjensen,dc=example,dc=com
+cn: Barbara Jensen
+mail: bjensen@example.com
+uid: bjensen
+objectClass: person
+objectClass: organizationalPerson
+objectClass: inetOrgPerson
