@@ -21,25 +21,164 @@ ou: services
 objectClass: top
 objectClass: organizationalUnit
 
+# Georgios Marselis
 dn: uid=gmarselis,ou=users,dc=marsel,dc=is
 uid: gmarselis
 cn: Georgios Marselis
 givenName: Georgios
 sn: Marselis
 displayName: Georgios Marselis
+initials: GM
+title: Seniorrådgiver
+description: Senior systems administrator and bioinformatician, ITK 104
+employeeType: Employee
+departmentNumber: ITK-104
+employeeNumber: vi2158
 mail: gmarselis@marsel.is
 mail: george.marselis@nvi.no
-l: Ås
-st: Akershus
-c: NO
-postalCode: 1430
+roomNumber: 104
+telephoneNumber: +47 22 11 00 00
+mobile: +47 900 00 000
+homePhone: +47 22 11 10 00
+pager: +47 900 10 000
+facsimileTelephoneNumber: +47 22 11 00 09
+internationaliSDNNumber: 47221100000
+telexNumber: 123455
+teletexTerminalIdentifier: TELEX-OSL-000
 street: Ullevålsveien 68
+postOfficeBox: PO Box 750
+postalCode: 1430
+postalAddress: Ullevålsveien 68$1430 Ås$Norway
+homePostalAddress: Ås sentrum 1$1430 Ås$Norway
+physicalDeliveryOfficeName: Hovedbygg, Rom 104
+st: Akershus
+l: Ås
 o: Norsk Veterinærinstituttet
 ou: ITK 104
-title: Seniorrådgiver
-telephoneNumber: +47
+businessCategory: IT
+carLicense: GM 00001
+preferredDeliveryMethod: any
+destinationIndicator: NO-OSL
+registeredAddress: Ullevålsveien 68$1430 Ås$Norway
 labeledURI: https://github.com/georgemarselis-nvi
-preferredLanguage: en
+manager: uid=gmarselis,ou=users,dc=marsel,dc=is
+secretary: uid=barbara,ou=users,dc=marsel,dc=is
+seeAlso: uid=barbara,ou=users,dc=marsel,dc=is
+userPassword: {SSHA}replaceWithSlappasswd
+preferredLanguage: en,nb
+x500UniqueIdentifier: 0000
+jpegPhoto:: /9j/4AAQSkZJRgABAQAAAQABAAD/2wBDAAgGBgcGBQgHBwcJCQgKDBQNDAsLDBkSEw8UHRofHh0aHBwgJC4nICIsIxwcKDcpLDAxNDQ0Hyc5PTgyPC4zNDL/wAALCAABAAEBAREA/8QAHwAAAQUBAQEBAQEAAAAAAAAAAAECAwQFBgcICQoL/8QAtRAAAgEDAwIEAwUFBAQAAAF9AQIDAAQRBRIhMUEGE1FhByJxFDKBkaEII0KxwRVS0fAkM2JyggkKFhcYGRolJicoKSo0NTY3ODk6Q0RFRkdISUpTVFVWV1hZWmNkZWZnaGlqc3R1dnd4eXqDhIWGh4iJipKTlJWWl5iZmqKjpKWmp6ipqrKztLW2t7i5usLDxMXGx8jJytLT1NXW19jZ2uHi4+Tl5ufo6erx8vP09fb3+Pn6/9oACAEBAAA/APvT/9k=
+photo:: /9j/4AAQSkZJRgABAQAAAQABAAD/2wBDAAgGBgcGBQgHBwcJCQgKDBQNDAsLDBkSEw8UHRofHh0aHBwgJC4nICIsIxwcKDcpLDAxNDQ0Hyc5PTgyPC4zNDL/wAALCAABAAEBAREA/8QAHwAAAQUBAQEBAQEAAAAAAAAAAAECAwQFBgcICQoL/8QAtRAAAgEDAwIEAwUFBAQAAAF9AQIDAAQRBRIhMUEGE1FhByJxFDKBkaEII0KxwRVS0fAkM2JyggkKFhcYGRolJicoKSo0NTY3ODk6Q0RFRkdISUpTVFVWV1hZWmNkZWZnaGlqc3R1dnd4eXqDhIWGh4iJipKTlJWWl5iZmqKjpKWmp6ipqrKztLW2t7i5usLDxMXGx8jJytLT1NXW19jZ2uHi4+Tl5ufo6erx8vP09fb3+Pn6/9oACAEBAAA/APvT/9k=
+audio:: UklGRiUAAABXQVZFZm10IBAAAAABAAEAQB8AAEAfAAABAAgAZGF0YQEAAACA
+objectClass: top
+objectClass: person
+objectClass: organizationalPerson
+objectClass: inetOrgPerson
+
+# Barbara Jensen
+dn: uid=barbara,ou=users,dc=marsel,dc=is
+uid: barbara
+cn: Barbara Jensen
+givenName: Barbara
+sn: Jensen
+displayName: Barbara Jensen
+initials: BJ
+title: Senior Researcher
+description: Senior researcher, marsel.is life sciences division
+employeeType: Employee
+departmentNumber: RES-001
+employeeNumber: E0001
+mail: barbara@marsel.is
+mail: bjensen@marsel.is
+roomNumber: 101
+telephoneNumber: +47 22 11 00 01
+mobile: +47 900 00 001
+homePhone: +47 22 11 10 01
+pager: +47 900 10 001
+facsimileTelephoneNumber: +47 22 11 00 10
+internationaliSDNNumber: 47221100001
+telexNumber: 123456
+teletexTerminalIdentifier: TELEX-OSL-001
+street: Ullevålsveien 68
+postOfficeBox: PO Box 750
+postalCode: 0106
+postalAddress: Ullevålsveien 68$0106 Oslo$Norway
+homePostalAddress: Kirkeveien 1$0450 Oslo$Norway
+physicalDeliveryOfficeName: Building A, Room 101
+st: Akershus
+l: Oslo
+o: marsel.is
+ou: users
+businessCategory: Research
+carLicense: AB 12345
+preferredDeliveryMethod: any
+destinationIndicator: NO-OSL
+registeredAddress: Ullevålsveien 68$0106 Oslo$Norway
+labeledURI: https://github.com/bjensen
+manager: uid=gmarselis,ou=users,dc=marsel,dc=is
+secretary: uid=matt,ou=users,dc=marsel,dc=is
+seeAlso: uid=matt,ou=users,dc=marsel,dc=is
+userPassword: {SSHA}replaceWithSlappasswd
+preferredLanguage: en,nb
+x500UniqueIdentifier: 0001
+jpegPhoto:: /9j/4AAQSkZJRgABAQAAAQABAAD/2wBDAAgGBgcGBQgHBwcJCQgKDBQNDAsLDBkSEw8UHRofHh0aHBwgJC4nICIsIxwcKDcpLDAxNDQ0Hyc5PTgyPC4zNDL/wAALCAABAAEBAREA/8QAHwAAAQUBAQEBAQEAAAAAAAAAAAECAwQFBgcICQoL/8QAtRAAAgEDAwIEAwUFBAQAAAF9AQIDAAQRBRIhMUEGE1FhByJxFDKBkaEII0KxwRVS0fAkM2JyggkKFhcYGRolJicoKSo0NTY3ODk6Q0RFRkdISUpTVFVWV1hZWmNkZWZnaGlqc3R1dnd4eXqDhIWGh4iJipKTlJWWl5iZmqKjpKWmp6ipqrKztLW2t7i5usLDxMXGx8jJytLT1NXW19jZ2uHi4+Tl5ufo6erx8vP09fb3+Pn6/9oACAEBAAA/APvT/9k=
+photo:: /9j/4AAQSkZJRgABAQAAAQABAAD/2wBDAAgGBgcGBQgHBwcJCQgKDBQNDAsLDBkSEw8UHRofHh0aHBwgJC4nICIsIxwcKDcpLDAxNDQ0Hyc5PTgyPC4zNDL/wAALCAABAAEBAREA/8QAHwAAAQUBAQEBAQEAAAAAAAAAAAECAwQFBgcICQoL/8QAtRAAAgEDAwIEAwUFBAQAAAF9AQIDAAQRBRIhMUEGE1FhByJxFDKBkaEII0KxwRVS0fAkM2JyggkKFhcYGRolJicoKSo0NTY3ODk6Q0RFRkdISUpTVFVWV1hZWmNkZWZnaGlqc3R1dnd4eXqDhIWGh4iJipKTlJWWl5iZmqKjpKWmp6ipqrKztLW2t7i5usLDxMXGx8jJytLT1NXW19jZ2uHi4+Tl5ufo6erx8vP09fb3+Pn6/9oACAEBAAA/APvT/9k=
+audio:: UklGRiUAAABXQVZFZm10IBAAAAABAAEAQB8AAEAfAAABAAgAZGF0YQEAAACA
+objectClass: top
+objectClass: person
+objectClass: organizationalPerson
+objectClass: inetOrgPerson
+
+# Matt Butcher
+dn: uid=matt,ou=users,dc=marsel,dc=is
+uid: matt
+cn: Matt Butcher
+givenName: Matt
+givenName: Matthew
+sn: Butcher
+displayName: Matt Butcher
+initials: MB
+title: Systems Integrator
+description: Systems Integration and IT for marsel.is
+employeeType: Employee
+departmentNumber: IT-001
+employeeNumber: E0002
+mail: matt@marsel.is
+mail: mbutcher@marsel.is
+roomNumber: 202
+telephoneNumber: +47 22 11 00 02
+mobile: +47 900 00 002
+homePhone: +47 22 11 10 02
+pager: +47 900 10 002
+facsimileTelephoneNumber: +47 22 11 00 11
+internationaliSDNNumber: 47221100002
+telexNumber: 123457
+teletexTerminalIdentifier: TELEX-OSL-002
+street: Ullevålsveien 68
+postOfficeBox: PO Box 750
+postalCode: 0106
+postalAddress: Ullevålsveien 68$0106 Oslo$Norway
+homePostalAddress: Grünerløkka 5$0552 Oslo$Norway
+physicalDeliveryOfficeName: Building B, Room 202
+st: Akershus
+l: Oslo
+o: marsel.is
+ou: users
+businessCategory: IT
+carLicense: CD 67890
+preferredDeliveryMethod: any
+destinationIndicator: NO-OSL
+registeredAddress: Ullevålsveien 68$0106 Oslo$Norway
+labeledURI: https://github.com/mattbutcher
+manager: uid=gmarselis,ou=users,dc=marsel,dc=is
+secretary: uid=barbara,ou=users,dc=marsel,dc=is
+seeAlso: uid=barbara,ou=users,dc=marsel,dc=is
+userPassword: {SSHA}replaceWithSlappasswd
+preferredLanguage: nb,en
+x500UniqueIdentifier: 0002
+jpegPhoto:: /9j/4AAQSkZJRgABAQAAAQABAAD/2wBDAAgGBgcGBQgHBwcJCQgKDBQNDAsLDBkSEw8UHRofHh0aHBwgJC4nICIsIxwcKDcpLDAxNDQ0Hyc5PTgyPC4zNDL/wAALCAABAAEBAREA/8QAHwAAAQUBAQEBAQEAAAAAAAAAAAECAwQFBgcICQoL/8QAtRAAAgEDAwIEAwUFBAQAAAF9AQIDAAQRBRIhMUEGE1FhByJxFDKBkaEII0KxwRVS0fAkM2JyggkKFhcYGRolJicoKSo0NTY3ODk6Q0RFRkdISUpTVFVWV1hZWmNkZWZnaGlqc3R1dnd4eXqDhIWGh4iJipKTlJWWl5iZmqKjpKWmp6ipqrKztLW2t7i5usLDxMXGx8jJytLT1NXW19jZ2uHi4+Tl5ufo6erx8vP09fb3+Pn6/9oACAEBAAA/APvT/9k=
+photo:: /9j/4AAQSkZJRgABAQAAAQABAAD/2wBDAAgGBgcGBQgHBwcJCQgKDBQNDAsLDBkSEw8UHRofHh0aHBwgJC4nICIsIxwcKDcpLDAxNDQ0Hyc5PTgyPC4zNDL/wAALCAABAAEBAREA/8QAHwAAAQUBAQEBAQEAAAAAAAAAAAECAwQFBgcICQoL/8QAtRAAAgEDAwIEAwUFBAQAAAF9AQIDAAQRBRIhMUEGE1FhByJxFDKBkaEII0KxwRVS0fAkM2JyggkKFhcYGRolJicoKSo0NTY3ODk6Q0RFRkdISUpTVFVWV1hZWmNkZWZnaGlqc3R1dnd4eXqDhIWGh4iJipKTlJWWl5iZmqKjpKWmp6ipqrKztLW2t7i5usLDxMXGx8jJytLT1NXW19jZ2uHi4+Tl5ufo6erx8vP09fb3+Pn6/9oACAEBAAA/APvT/9k=
+audio:: UklGRiUAAABXQVZFZm10IBAAAAABAAEAQB8AAEAfAAABAAgAZGF0YQEAAACA
 objectClass: top
 objectClass: person
 objectClass: organizationalPerson
