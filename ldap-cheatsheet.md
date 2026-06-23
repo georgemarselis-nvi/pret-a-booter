@@ -52,3 +52,13 @@ ansible-playbook -i inventory.yml slapd.yml
 #   )
 #   (roomNumber>=300)
 # )
+
+# (objectclass=*) — the universal filter
+
+(objectclass=*) matches every entry in the DIT.
+Every entry must have at least one objectClass, so this filter always matches.
+It is the broadest possible filter — cannot be simplified further.
+(objectclass=) is invalid syntax — empty value is not the same as present.
+
+# common use: dump everything under a base DN
+/usr/bin/ldapsearch -LLL -x -y ~/.ldappasswd -H ldap://ldap.marsel.is -D "cn=admin,dc=marsel,dc=is" -b "dc=marsel,dc=is" -s sub "(objectclass=*)"
