@@ -183,3 +183,24 @@ objectClass: top
 objectClass: person
 objectClass: organizationalPerson
 objectClass: inetOrgPerson
+
+# Special Account for Authentication
+dn: uid=authenticate,ou=services,dc=marsel,dc=is
+uid: authenticate
+ou: services
+description: Special account for authenticating users to the directory
+userPassword: {SSHA}replaceWithSlappasswd
+objectClass: top
+objectClass: account
+objectClass: simpleSecurityObject
+
+# LDAP Admins Group
+dn: cn=LDAP Admins,ou=groups,dc=marsel,dc=is
+cn: LDAP Admins
+ou: groups
+description: Users who are LDAP administrators
+uniqueMember: uid=gmarselis,ou=users,dc=marsel,dc=is
+uniqueMember: uid=barbara,ou=users,dc=marsel,dc=is
+uniqueMember: uid=matt,ou=users,dc=marsel,dc=is
+objectClass: top
+objectClass: groupOfUniqueNames
