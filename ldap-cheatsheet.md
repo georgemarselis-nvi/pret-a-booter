@@ -19,3 +19,36 @@ ansible-playbook -i inventory.yml slapd.yml
 #   - suffix dc=nvi,dc=no
 #   - rootdn cn=admin,dc=nvi,dc=no (admin account)
 #   - personal account: uid=vi2158,ou=people,dc=nvi,dc=no (or equivalent OU)
+
+# LDAP filter syntax (RFC 4515) - prefix/Polish notation
+# operators: & (AND)  | (OR)  ! (NOT)
+# operator comes FIRST, operands follow
+
+# single filter
+(attribute=value)
+
+# operators
+(&(filter1)(filter2))        # AND
+(|(filter1)(filter2))        # OR
+(!(filter))                  # NOT
+
+# comparison operators
+(attr=value)                 # equal
+(attr~=value)                # approximate
+(attr>=value)                # greater or equal
+(attr<=value)                # less or equal
+(attr=*)                     # present (attribute exists)
+(attr=val*)                  # substring (starts with)
+(attr=*val)                  # substring (ends with)
+(attr=*val*)                 # substring (contains)
+
+# nested example
+(&(|(mail=m*)(mail=n*))(roomNumber>=300))
+# expanded:
+# (&
+#   (|
+#     (mail=m*)
+#     (mail=n*)
+#   )
+#   (roomNumber>=300)
+# )
