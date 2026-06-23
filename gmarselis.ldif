@@ -199,8 +199,8 @@ dn: cn=LDAP Admins,ou=groups,dc=marsel,dc=is
 cn: LDAP Admins
 ou: groups
 description: Users who are LDAP administrators
-uniqueMember: uid=gmarselis,ou=users,dc=marsel,dc=is
-uniqueMember: uid=barbara,ou=users,dc=marsel,dc=is
-uniqueMember: uid=matt,ou=users,dc=marsel,dc=is
+member: uid=gmarselis,ou=users,dc=marsel,dc=is
+member: uid=barbara,ou=users,dc=marsel,dc=is
+member: uid=matt,ou=users,dc=marsel,dc=is
 objectClass: top
-objectClass: groupOfUniqueNames
+objectClass: groupOfNames
