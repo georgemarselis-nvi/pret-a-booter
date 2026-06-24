@@ -76,3 +76,13 @@ It is the broadest possible filter — cannot be simplified further.
 /usr/sbin/slapauth -f /etc/ldap/slapd.conf -U gmarselis -X dn:uid=gmarselis,ou=users,dc=marsel,dc=is -M GSSAPI
 /usr/sbin/slapauth -f /etc/ldap/slapd.conf -U barbara -M PLAIN
 /usr/sbin/slapauth -v -f /etc/ldap/slapd.conf -U gmarselis -M GSSAPI
+# password cracking (lab/educational use only)
+# extract hash from directory
+/usr/bin/ldapsearch -LLL -x -y ~/.ldappasswd -H ldap://ldap.marsel.is -D "cn=admin,dc=marsel,dc=is" -b "dc=marsel,dc=is" "(uid=gmarselis)" userPassword
+# rootpw hash from slapd.conf: {SSHA}mlNdcAZ3XlPsIWTQoMZjbARljPjWm9H6
+# SSHA = SHA-1 + salt, base64-encoded. decode to extract hash and salt:
+# echo -n '{SSHA}mlNdcAZ3XlPsIWTQoMZjbARljPjWm9H6' | base64 -d | xxd
+# crack with john (format=LDAP-SSHA or use --format=raw-sha1)
+/usr/sbin/john --format=LDAP-SSHA /tmp/hashes.txt
+# crack with hashcat (-m 111 = SSHA)
+/usr/bin/hashcat -m 111 '{SSHA}mlNdcAZ3XlPsIWTQoMZjbARljPjWm9H6' /usr/share/wordlists/rockyou.txt
