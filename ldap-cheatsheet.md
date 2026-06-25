@@ -84,4 +84,41 @@ It is the broadest possible filter — cannot be simplified further.
 # -W    | prompt interactively for password
 # -w    | password inline (visible in ps aux, avoid in production)
 # -y    | read password from file (entire file contents, no trailing newline)
-#       | create
+#       | create with: echo -n "secret" > ~/.ldappasswd && chmod 600 ~/.ldappasswd
+# -x    | use simple bind (overrides default SASL attempt)
+#       | LDAP v4: eliminated, bind method from session context
+# -H    | LDAP URL: -H ldap://host:port or -H ldaps://host
+# -h    | hostname only (deprecated, backward compat only, use -H)
+# -p    | port (deprecated, use -H with port in URL)
+# -z    | StartTLS — try TLS, continue cleartext if negotiation fails (stupid)
+# -zz   | StartTLS mandatory — disconnect if TLS negotiation fails
+#       | LDAP v4: TLS mandatory by default, no flag needed
+# -b    | base DN for search scope
+#       | LDAP v4: eliminated, server provides context on connect
+# -f    | read operations from file
+#       | LDAP v4: eliminated, use stdin redirect instead: ldapsearch < queries.txt
+# -v    | verbose output
+# -L    | output in LDIF format (-LL omits comments, -LLL minimal)
+# -s    | search scope: base, one, sub, children
+# -a    | alias dereferencing: never, always, search, find
+# with ~/.ldaprc in place (URI, BASE, BINDDN set), minimum working search:
+ldapsearch -x -y ~/.ldappasswd "(uid=barbara)"
+# parametrized queries with -f (current implementation: one parameter only, %s)
+# userIDs.txt contains one value per line; ldapsearch substitutes each into %s
+# example userIDs.txt:
+#   matt
+#   barbara
+/usr/bin/ldapsearch -LLL -x -y ~/.ldappasswd -H ldap://ldap.marsel.is -D "cn=admin,dc=marsel,dc=is" -b "ou=users,dc=marsel,dc=is" -f userIDs.txt "(uid=%s)" sn
+# limitation: only one substitution parameter (%s) per query in current ldapsearch
+# LDAP v4: expand to %s0..%sN for multi-column input, no injection risk
+# password cracking (lab/educational use only)
+# extract hash from directory
+/usr/bin/ldapsearch -LLL -x -y ~/.ldappasswd -H ldap://ldap.marsel.is -D "cn=admin,dc=marsel,dc=is" -b "dc=marsel,dc=is" "(uid=gmarselis)" userPassword
+# rootpw hash from slapd.conf: {SSHA}mlNdcAZ3XlPsIWTQoMZjbARljPjWm9H6
+# SSHA = SHA-1 + salt, base64-encoded. decode to extract hash and salt:
+# echo -n '{SSHA}mlNdcAZ3XlPsIWTQoMZjbARljPjWm9H6' | base64 -d | xxd
+# crack with john (format=LDAP-SSHA or use --format=raw-sha1)
+/usr/sbin/john --format=LDAP-SSHA /tmp/hashes.txt
+# crack with hashcat (-m 111 = SSHA)
+/usr/bin/hashcat -m 111 '{SSHA}mlNdcAZ3XlPsIWTQoMZjbARljPjWm9H6' /usr/share/wordlists/rockyou.txt
+# TODO: crack {SSHA}mlNdcAZ3XlPsIWTQoMZjbARljPjWm9H6 over the weekend (password is 12345, verify the toolchain works)
