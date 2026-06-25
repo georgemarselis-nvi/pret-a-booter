@@ -111,6 +111,66 @@ ldapsearch -x -y ~/.ldappasswd "(uid=barbara)"
 /usr/bin/ldapsearch -LLL -x -y ~/.ldappasswd -H ldap://ldap.marsel.is -D "cn=admin,dc=marsel,dc=is" -b "ou=users,dc=marsel,dc=is" -f userIDs.txt "(uid=%s)" sn
 # limitation: only one substitution parameter (%s) per query in current ldapsearch
 # LDAP v4: expand to %s0..%sN for multi-column input, no injection risk
+# ldapmodify — add, modify, delete attributes and entries
+# WARNING: changetype is an instruction embedded in the LDIF data, not a flag
+# changetype: add        — add a new entry
+# changetype: modify     — modify an existing entry
+# changetype: delete     — delete an entry
+# changetype: modrdn     — rename the RDN of an entry
+# add a new entry from LDIF file
+/usr/bin/ldapmodify -x -y ~/.ldappasswd -H ldap://ldap.marsel.is -D "cn=admin,dc=marsel,dc=is" -f new-entry.ldif
+# add a single attribute to an existing entry
+# new-attr.ldif:
+#   dn: uid=barbara,ou=users,dc=marsel,dc=is
+#   changetype: modify
+#   add: givenName
+#   givenName: Barbara
+/usr/bin/ldapmodify -x -y ~/.ldappasswd -H ldap://ldap.marsel.is -D "cn=admin,dc=marsel,dc=is" -f new-attr.ldif
+# add multiple attributes in one operation (dash separates operations on same entry)
+# TODO: test grouped multi-attr add on slapd 2.6.x — book says it works,
+#       2.6.2 reportedly rejects it; use dash-separated blocks if grouping fails
+# grouped (may fail on 2.6.x):
+#   dn: uid=barbara,ou=users,dc=marsel,dc=is
+#   changetype: modify
+#   add: description title
+#   description: Senior researcher
+#   title: Dr
+# dash-separated (works on 2.6.x):
+#   dn: uid=barbara,ou=users,dc=marsel,dc=is
+#   changetype: modify
+#   add: description
+#   description: Senior researcher
+#   -
+#   add: title
+#   title: Dr
+# delete ALL values of an attribute
+# del-all.ldif:
+#   dn: uid=barbara,ou=users,dc=marsel,dc=is
+#   changetype: modify
+#   delete: title
+# WARNING: omitting the value deletes ALL values of that attribute silently
+/usr/bin/ldapmodify -x -y ~/.ldappasswd -H ldap://ldap.marsel.is -D "cn=admin,dc=marsel,dc=is" -f del-all.ldif
+# delete ONE specific attribute value
+# del-one.ldif:
+#   dn: uid=barbara,ou=users,dc=marsel,dc=is
+#   changetype: modify
+#   delete: title
+#   title: Senior Researcher
+/usr/bin/ldapmodify -x -y ~/.ldappasswd -H ldap://ldap.marsel.is -D "cn=admin,dc=marsel,dc=is" -f del-one.ldif
+# rename RDN (modrdn) — deleteoldrdn: 0 keeps old value, 1 removes it
+# rename.ldif:
+#   dn: uid=barbara,ou=users,dc=marsel,dc=is
+#   changetype: modrdn
+#   newrdn: uid=bjensen
+#   deleteoldrdn: 0
+/usr/bin/ldapmodify -x -y ~/.ldappasswd -H ldap://ldap.marsel.is -D "cn=admin,dc=marsel,dc=is" -f rename.ldif
+# restore original RDN
+# restore.ldif:
+#   dn: uid=bjensen,ou=users,dc=marsel,dc=is
+#   changetype: modrdn
+#   newrdn: uid=barbara
+#   deleteoldrdn: 1
+/usr/bin/ldapmodify -x -y ~/.ldappasswd -H ldap://ldap.marsel.is -D "cn=admin,dc=marsel,dc=is" -f restore.ldif
 # password cracking (lab/educational use only)
 # extract hash from directory
 /usr/bin/ldapsearch -LLL -x -y ~/.ldappasswd -H ldap://ldap.marsel.is -D "cn=admin,dc=marsel,dc=is" -b "dc=marsel,dc=is" "(uid=gmarselis)" userPassword
