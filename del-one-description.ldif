@@ -1,0 +1,11 @@
+# Test: delete ONE specific attribute value on slapd 2.6.x
+# Book: Packt OpenLDAP, page 123 - "To delete just one specific attribute"
+# barbara currently has two description values; this deletes only the test one
+# Expected: "Updated description for dash-separated test" removed, original kept
+# Run with: ldapmodify -x -y ~/.ldappasswd -f del-one-description.ldif
+# Verify with:
+#   ldapsearch -x -y ~/.ldappasswd "(uid=barbara)" description
+dn: uid=barbara,ou=users,dc=marsel,dc=is
+changetype: modify
+delete: description
+description: Updated description for dash-separated test

@@ -1,0 +1,11 @@
+# Test: delete ALL values of an attribute on slapd 2.6.x
+# Book: Packt OpenLDAP, page 123 - "Deleting an attribute from the record"
+# WARNING: omitting the value deletes ALL values of that attribute silently
+# barbara currently has two title values: "Senior Researcher" and "Test Title"
+# Expected: both values removed
+# Run with: ldapmodify -x -y ~/.ldappasswd -f del-all-title.ldif
+# Verify with:
+#   ldapsearch -x -y ~/.ldappasswd "(uid=barbara)" title
+dn: uid=barbara,ou=users,dc=marsel,dc=is
+changetype: modify
+delete: title

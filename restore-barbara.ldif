@@ -1,0 +1,14 @@
+# Restore barbara to original state after chapter 3 tests (TODOs 1, 2, 3)
+# Tests performed:
+#   1. grouped add (add: description title) - FAILED on slapd 2.6.x
+#   2. dash-separated add - added title "Test Title" and description "Updated description for dash-separated test"
+#   3. delete all title values - removed both "Senior Researcher" and "Test Title"
+# Net result: barbara is missing title attribute entirely
+# This LDIF restores title: Senior Researcher
+# Run with: ldapmodify -x -y ~/.ldappasswd -f restore-barbara.ldif
+# Verify with:
+#   ldapsearch -x -y ~/.ldappasswd "(uid=barbara)" title description
+dn: uid=barbara,ou=users,dc=marsel,dc=is
+changetype: modify
+add: title
+title: Senior Researcher
