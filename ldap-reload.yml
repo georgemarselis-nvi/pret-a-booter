@@ -2,19 +2,16 @@
 - name: Reload LDAP database from LDIF
   hosts: ldap
   become: true
-
   vars:
     slapd_conf: /etc/ldap/slapd.conf
     ldap_data_dir: /var/lib/ldap
-    ldif_src: "{{ playbook_dir }}/marsel.is.ldif"
-    ldif_dest: /tmp/marsel.is.ldif
-
+    ldif_src: "{{ playbook_dir }}/gmarselis.ldif"
+    ldif_dest: /tmp/gmarselis.ldif
   tasks:
     - name: Stop slapd
       ansible.builtin.systemd:
         name: slapd
         state: stopped
-
     - name: Nuke MDB files
       ansible.builtin.file:
         path: "{{ ldap_data_dir }}/{{ item }}"
@@ -22,36 +19,30 @@
       loop:
         - data.mdb
         - lock.mdb
-
     - name: Copy LDIF to host
       ansible.builtin.copy:
         src: "{{ ldif_src }}"
         dest: "{{ ldif_dest }}"
         mode: "0600"
-
     - name: Dry-run slapadd
       ansible.builtin.command:
         cmd: /usr/sbin/slapadd -v -u -f {{ slapd_conf }} -l {{ ldif_dest }}
       register: slapadd_dry
       changed_when: false
-
     - name: Load LDIF
       ansible.builtin.command:
         cmd: /usr/sbin/slapadd -v -f {{ slapd_conf }} -l {{ ldif_dest }}
       register: slapadd_load
-
     - name: Fix ownership
       ansible.builtin.file:
         path: "{{ ldap_data_dir }}"
         owner: openldap
         group: openldap
         recurse: true
-
     - name: Start slapd
       ansible.builtin.systemd:
         name: slapd
         state: started
-
     - name: Remove temp LDIF
       ansible.builtin.file:
         path: "{{ ldif_dest }}"
