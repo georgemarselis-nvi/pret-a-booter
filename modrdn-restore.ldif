@@ -1,0 +1,11 @@
+# Test: modrdn restore with deleteoldrdn: 1 on slapd 2.6.x
+# Book: Packt OpenLDAP, page 125
+# deleteoldrdn: 1 removes old uid value from entry
+# Expected: entry has only uid=barbara, uid=bjensen gone
+# Run with: ldapmodify -x -y ~/.ldappasswd -f modrdn-restore.ldif
+# Verify with:
+#   ldapsearch -x -y ~/.ldappasswd "(uid=barbara)" uid
+dn: uid=bjensen,ou=users,dc=marsel,dc=is
+changetype: modrdn
+newrdn: uid=barbara
+deleteoldrdn: 1

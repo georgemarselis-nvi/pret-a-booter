@@ -1,0 +1,11 @@
+# Test: modrdn rename with deleteoldrdn: 0 on slapd 2.6.x
+# Book: Packt OpenLDAP, page 125
+# deleteoldrdn: 0 keeps old uid value as regular attribute on entry
+# Expected: entry has both uid=barbara and uid=bjensen after rename
+# Run with: ldapmodify -x -y ~/.ldappasswd -f modrdn-rename.ldif
+# Verify with:
+#   ldapsearch -x -y ~/.ldappasswd "(uid=bjensen)" uid
+dn: uid=barbara,ou=users,dc=marsel,dc=is
+changetype: modrdn
+newrdn: uid=bjensen
+deleteoldrdn: 0
