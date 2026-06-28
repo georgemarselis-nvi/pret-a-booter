@@ -30,7 +30,7 @@ No passwords in the directory. `slappasswd` eliminated. `ldappasswd` silently re
 
 Compound RDNs eliminated. `entryUUID` is the stable identity. DN is a single-attribute path. No `+` syntax in DNs.
 
-`modrdn` as a concept eliminated for entry moves. Rename is a delete and re-add : atomic, explicit, no ambiguity about old values. No dummy RDN required to move an entry to a new superior. `entryUUID` is the stable identity. DN is a path.
+`modrdn` as a concept eliminated for entry moves. Rename is a delete and re-add, wrapped in an explicit transaction : delete succeeds only if re-add succeeds, re-add succeeds only if delete succeeds. Partial failure rolls back automatically. No dummy RDN required to move an entry to a new superior. `entryUUID` is the stable identity and survives the operation unchanged. DN is a path.
 
 `slapacl` replaced by a tool that returns the effective ACL set as structured data. Verification is the caller's problem. Ansible modules provided for ACL testing and enforcement as policy-as-code.
 
