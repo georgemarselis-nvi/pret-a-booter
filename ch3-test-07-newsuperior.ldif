@@ -1,0 +1,13 @@
+# Test: newsuperior - move entry to different OU on slapd 2.6.x
+# Book: Packt OpenLDAP, page 126
+# Book claims: entry retains ou=users attribute after move
+# Margin note: FALSE with deleteoldrdn: 1 - ou attribute is removed
+# Expected on slapd 2.6.x: ou=users attribute gone after move
+# Run with: ldapmodify -x -y ~/.ldappasswd -f ch3-test-07-newsuperior.ldif
+# Verify with:
+#   ldapsearch -x -y ~/.ldappasswd "(uid=barbara)" ou dn
+dn: uid=barbara,ou=users,dc=marsel,dc=is
+changetype: modrdn
+newrdn: uid=barbara
+deleteoldrdn: 1
+newsuperior: ou=services,dc=marsel,dc=is
