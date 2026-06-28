@@ -1,0 +1,11 @@
+# Test: grouped multi-attribute add on slapd 2.6.x
+# Book: Packt OpenLDAP, page 122 - grouped add syntax
+# Expected: fails on slapd 2.6.x with "wrong attributeType"
+# Run with: ldapmodify -x -y ~/.ldappasswd -f grouped-add-fail-test.ldif
+# Verify with:
+#   ldapsearch -x -y ~/.ldappasswd "(uid=barbara)" description title
+dn: uid=barbara,ou=users,dc=marsel,dc=is
+changetype: modify
+add: description title
+description: Grouped add test description
+title: Grouped add test title
