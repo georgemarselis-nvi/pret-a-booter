@@ -1,0 +1,15 @@
+# Test: dash-separated multi-attribute add on slapd 2.6.x
+# Book: Packt OpenLDAP, page 124 - "More than one of these operations can be done in a single transaction"
+# Grouped add (add: description title) as shown on page 122 fails on slapd 2.6.x with "wrong attributeType"
+# Dash-separated blocks (page 124) work correctly
+# Run with:
+#   ldapmodify -x -y ~/.ldappasswd -f grouped-add-test.ldif 
+# Verify with
+#   ldapsearch -x -y ~/.ldappasswd "(uid=barbara)"
+dn: uid=barbara,ou=users,dc=marsel,dc=is
+changetype: modify
+add: description
+description: Updated description for dash-separated test
+-
+add: title
+title: Test Title
