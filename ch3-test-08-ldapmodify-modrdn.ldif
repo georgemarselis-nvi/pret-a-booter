@@ -1,0 +1,12 @@
+# Test: ldapmodrdn vs ldapmodify modrdn - confirm identical results on slapd 2.6.x
+# Book: Packt OpenLDAP, page 129
+# ldapmodrdn is just ldapmodify with changetype: modrdn
+# Expected: both produce identical results
+# Step 1: rename with ldapmodify
+# Run with: ldapmodify -x -y ~/.ldappasswd -f ch3-test-08-ldapmodify-modrdn.ldif
+# Verify with:
+#   ldapsearch -x -y ~/.ldappasswd "(uid=bjensen)" uid
+dn: uid=barbara,ou=users,dc=marsel,dc=is
+changetype: modrdn
+newrdn: uid=bjensen
+deleteoldrdn: 1

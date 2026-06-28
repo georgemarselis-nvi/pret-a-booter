@@ -1,0 +1,8 @@
+# Restore: rename bjensen back to barbara before ldapmodrdn test
+# Run with: ldapmodify -x -y ~/.ldappasswd -f ch3-test-08-restore-before-ldapmodrdn.ldif
+# Verify with:
+#   ldapsearch -x -y ~/.ldappasswd "(uid=barbara)" uid
+dn: uid=bjensen,ou=users,dc=marsel,dc=is
+changetype: modrdn
+newrdn: uid=barbara
+deleteoldrdn: 1
