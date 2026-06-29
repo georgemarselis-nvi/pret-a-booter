@@ -8,12 +8,26 @@ Generates a complete OpenLDAP schema inheritance hierarchy SVG.
 - Renders O'Reilly UML box notation
 - Left-to-right layout, top node at upper left
 - Inherited attributes marked with source objectClass
+- Print-ready SVG with physical dimensions at specified DPI
 
 Usage:
     python3 generate_schema_hierarchy.py
-    # Output: openldap_schema_hierarchy.svg
+    python3 generate_schema_hierarchy.py --dpi 300
+    python3 generate_schema_hierarchy.py --dpi 300 --paper A0
+    python3 generate_schema_hierarchy.py --dpi 300 --paper custom --width-mm 2000 --height-mm 1200
 
-Requirements: Python 3 stdlib only (json, html, re, collections)
+    --dpi        Output DPI (default: 300). Sets physical size in SVG width/height attributes.
+    --paper      Paper size: A0, A1, A2, A3, A4, custom (default: auto = fit content)
+                 When specified, content scales to fit the paper at the given DPI.
+    --width-mm   Custom paper width in mm (requires --paper custom)
+    --height-mm  Custom paper height in mm (requires --paper custom)
+    --landscape  Swap width/height for landscape orientation
+    --output     Output filename (default: openldap_schema_hierarchy.svg)
+
+    Standard large-format paper sizes (mm, landscape):
+      A0: 1189 x 841    A1: 841 x 594    A2: 594 x 420
+
+Requirements: Python 3 stdlib only (json, html, re, collections, argparse)
 
 Author: generated for pret-a-booter / NVI LDAP infrastructure
 """
@@ -22,11 +36,36 @@ import re
 import os
 import json
 import html
+import argparse
 from collections import deque
 
+# ── CLI args ──────────────────────────────────────────────────────────────────
+parser = argparse.ArgumentParser(description='Generate OpenLDAP schema hierarchy SVG')
+parser.add_argument('--dpi',        type=int,   default=300,   help='Output DPI (default: 300)')
+parser.add_argument('--paper',      type=str,   default='auto',
+                    choices=['auto', 'A0', 'A1', 'A2', 'A3', 'A4', 'custom'],
+                    help='Paper size (default: auto = fit content)')
+parser.add_argument('--width-mm',   type=float, default=None,  help='Custom paper width mm')
+parser.add_argument('--height-mm',  type=float, default=None,  help='Custom paper height mm')
+parser.add_argument('--landscape',  action='store_true',       help='Landscape orientation')
+parser.add_argument('--output',     type=str,   default='openldap_schema_hierarchy.svg')
+args = parser.parse_args()
+
+# Paper sizes in mm (portrait)
+PAPER_SIZES_MM = {
+    'A0': (841,  1189),
+    'A1': (594,  841),
+    'A2': (420,  594),
+    'A3': (297,  420),
+    'A4': (210,  297),
+}
+
+MM_PER_INCH = 25.4
+
 # ── Config ────────────────────────────────────────────────────────────────────
-SCHEMA_DIR = '/etc/ldap/schema'
-OUTPUT_FILE = 'openldap_schema_hierarchy.svg'
+SCHEMA_DIR  = '/etc/ldap/schema'
+OUTPUT_FILE = args.output
+DPI         = args.dpi
 
 SCHEMA_FILES = [
     'core', 'cosine', 'inetorgperson', 'collective', 'corba', 'dsee',
@@ -329,7 +368,30 @@ def render_arrows():
 # ── Assemble SVG ──────────────────────────────────────────────────────────────
 
 svg = ['<?xml version="1.0" encoding="UTF-8"?>']
-svg.append(f'<svg xmlns="http://www.w3.org/2000/svg" width="{total_w}" height="{total_h}" viewBox="0 0 {total_w} {total_h}">')
+# ── Physical dimensions ──────────────────────────────────────────────────────
+# SVG width/height in mm at specified DPI for print-ready output
+px_per_mm = DPI / 25.4
+w_mm = total_w / px_per_mm
+h_mm = total_h / px_per_mm
+
+if args.paper != 'auto':
+    if args.paper == 'custom':
+        paper_w_mm = args.width_mm or w_mm
+        paper_h_mm = args.height_mm or h_mm
+    else:
+        pw, ph = PAPER_SIZES_MM[args.paper]
+        paper_w_mm, paper_h_mm = (ph, pw) if args.landscape else (pw, ph)
+    # Scale viewBox to fit content onto paper
+    scale_fit = min(paper_w_mm / w_mm, paper_h_mm / h_mm)
+    w_mm = paper_w_mm
+    h_mm = paper_h_mm
+    vb_w = total_w / scale_fit
+    vb_h = total_h / scale_fit
+    viewbox = f'0 0 {int(vb_w)} {int(vb_h)}'
+else:
+    viewbox = f'0 0 {total_w} {total_h}'
+
+svg.append(f'<svg xmlns="http://www.w3.org/2000/svg" width="{w_mm:.2f}mm" height="{h_mm:.2f}mm" viewBox="{viewbox}">')
 svg.append('<defs><marker id="arr" markerWidth="8" markerHeight="8" refX="6" refY="3" orient="auto"><path d="M0,0 L0,6 L8,3 z" fill="#888"/></marker></defs>')
 svg.append(f'<rect width="{total_w}" height="{total_h}" fill="#e8e8e8"/>')
 
@@ -359,4 +421,4 @@ svg.append('</svg>')
 with open(OUTPUT_FILE, 'w') as f:
     f.write('\n'.join(svg))
 
-print(f"Written {OUTPUT_FILE}: {total_w}x{total_h}px, {len(bfs_order)} objectClasses")
+print(f"Written {OUTPUT_FILE}: {total_w}x{total_h}px ({w_mm:.1f}x{h_mm:.1f}mm at {DPI}dpi), {len(bfs_order)} objectClasses")
