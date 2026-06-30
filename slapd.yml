@@ -21,6 +21,66 @@
   vars:
     ansible_python_interpreter: /usr/bin/python3
   tasks:
+    # --------------------------------------------------------------
+    # 1. Validate the new config LOCALLY before it ever touches the
+    #    remote host. Catches syntax errors before deployment instead
+    #    of after, when rollback is still trivial (nothing changed yet).
+    #
+    #    slapd.conf hardcodes Debian's schema path (/etc/ldap/schema/),
+    #    but molly (the Ansible control node) is Fedora, where the
+    #    same files live under /etc/openldap/schema/. The symlink below
+    #    exists purely so the include directives resolve locally for
+    #    validation -- it only runs on Fedora/RedHat-family localhost,
+    #    never on the remote Debian target.
+    # --------------------------------------------------------------
+    - name: Symlink /etc/ldap to Fedora's schema path for local slaptest
+      ansible.builtin.file:
+        src: /etc/openldap
+        dest: /etc/ldap
+        state: link
+      delegate_to: localhost
+      become: true
+      run_once: true
+      when: hostvars['localhost']['ansible_facts']['os_family'] | default('') == "RedHat"
+      failed_when: false
+
+    - name: Validate slapd.conf locally before deployment
+      ansible.builtin.command: /usr/sbin/slaptest -v -f slapd.conf
+      delegate_to: localhost
+      register: local_slaptest
+      changed_when: false
+      run_once: true
+    - name: Fail fast if local validation fails
+      ansible.builtin.fail:
+        msg: "slapd.conf failed local validation, refusing to deploy: {{ local_slaptest.stderr }}"
+      when: local_slaptest.rc != 0
+
+    # --------------------------------------------------------------
+    # 2. Confirm the remote host is actually reachable and slapd is
+    #    in a known state before we start mutating its config.
+    # --------------------------------------------------------------
+    - name: Check remote host is reachable
+      ansible.builtin.ping:
+    - name: Check current slapd service state
+      ansible.builtin.systemd:
+        name: slapd
+      register: slapd_pre_state
+      become: true
+    - name: Attempt to start slapd if not already running
+      ansible.builtin.systemd:
+        name: slapd
+        state: started
+      become: true
+      when: slapd_pre_state.status.ActiveState != "active"
+      register: slapd_pre_start
+      failed_when: false
+    - name: Fail if slapd cannot be started before deployment
+      ansible.builtin.fail:
+        msg: "slapd is not running on {{ inventory_hostname }} and could not be started -- refusing to deploy on top of a broken service"
+      when: >
+        slapd_pre_state.status.ActiveState != "active" and
+        (slapd_pre_start is failed or slapd_pre_start.status.ActiveState != "active")
+
     - name: Backup slapd.conf
       ansible.builtin.copy:
         src: /etc/ldap/slapd.conf
@@ -30,7 +90,6 @@
         mode: '0640'
         remote_src: true
       become: true
-
     - name: Deploy slapd.conf
       ansible.builtin.copy:
         src: slapd.conf
@@ -40,14 +99,12 @@
         mode: '0640'
       become: true
       notify: Restart slapd
-
     - name: Validate slapd.conf
       ansible.builtin.command: /usr/sbin/slaptest -v -f /etc/ldap/slapd.conf
       register: slaptest
       changed_when: false
       failed_when: false
       become: true
-
     - name: Rollback slapd.conf on validation failure
       ansible.builtin.copy:
         src: /etc/ldap/slapd.conf.orig
@@ -58,12 +115,10 @@
         remote_src: true
       become: true
       when: slaptest.rc != 0
-
     - name: Fail if slapd.conf validation failed
       ansible.builtin.fail:
         msg: "slapd.conf validation failed, rolled back to previous version"
       when: slaptest.rc != 0
-
     - name: Backup ldap.conf
       ansible.builtin.copy:
         src: /etc/ldap/ldap.conf
@@ -73,7 +128,6 @@
         mode: '0644'
         remote_src: true
       become: true
-
     - name: Deploy ldap.conf
       ansible.builtin.copy:
         src: ldap.conf
@@ -82,6 +136,51 @@
         group: root
         mode: '0644'
       become: true
+
+    # --------------------------------------------------------------
+    # 3. Force the handler to fire here (rather than waiting for
+    #    end-of-play) so the TLS check below runs against the
+    #    actually-restarted service, not whatever was running before.
+    # --------------------------------------------------------------
+    - name: Flush handlers to apply restart before TLS check
+      ansible.builtin.meta: flush_handlers
+
+    - name: Confirm slapd is active after restart
+      ansible.builtin.systemd:
+        name: slapd
+      register: slapd_post_state
+      become: true
+    - name: Fail if slapd is not active after deployment
+      ansible.builtin.fail:
+        msg: "slapd is not active on {{ inventory_hostname }} after config deployment"
+      when: slapd_post_state.status.ActiveState != "active"
+
+    # --------------------------------------------------------------
+    # GnuTLS's gnutls-cli gives a cleaner machine-parseable summary of
+    # the negotiated protocol/cipher than openssl s_client's free-text
+    # output -- preferred here for an automated pass/fail check.
+    # gnutls-utils is not installed by default on Fedora; ensured below.
+    # --------------------------------------------------------------
+    - name: Ensure gnutls-utils is installed on control node for TLS verification
+      ansible.builtin.dnf:
+        name: gnutls-utils
+        state: present
+      delegate_to: localhost
+      become: true
+      run_once: true
+
+    - name: Verify TLS 1.3 handshake on port 636
+      ansible.builtin.command: >
+        gnutls-cli --port 636
+        --priority "SECURE256:+VERS-TLS1.3:-VERS-ALL"
+        --logfile /dev/null
+        {{ inventory_hostname }}
+      args:
+        stdin: ""
+      delegate_to: localhost
+      register: tls_check
+      changed_when: false
+      failed_when: "'Handshake was completed' not in tls_check.stdout"
 
   handlers:
     - name: Restart slapd
