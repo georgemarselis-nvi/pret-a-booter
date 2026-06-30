@@ -24,7 +24,9 @@ No passwords in the directory. `slappasswd` eliminated. `ldappasswd` silently re
 
 `changetype` eliminated from LDIF records. Operation is a flag on the command, never embedded in data. Data files contain data only : no executable directives. Prevents injection of unintended operations through data payloads.
 
-`ldapadd`, `ldapdelete`, `ldapmodrdn` etc. are shell wrappers around `ldapmodify --add`, `ldapmodify --delete`, `ldapmodify --rename`. No `argv[0]` detection in the binary.
+`ldapmodify` takes subcommands : `ldapmodify add`, `ldapmodify delete`, `ldapmodify rename`. One binary, one argument grammar, same pattern as `git add`/`git commit`. The operation is the first word after the binary name, not a flag buried among others.
+
+`ldapadd`, `ldapdelete`, `ldapmodrdn` retained as symlinks to `ldapmodify` for compatibility and muscle memory : `ldapadd` is `ldapmodify add`, `ldapdelete` is `ldapmodify delete`, `ldapmodrdn` is `ldapmodify rename`. No `argv[0]` detection inside the binary itself : the symlinks are transparent aliases, not a parsing branch.
 
 `modrdn` default is replace : old RDN value removed unless `--keep-old-rdn` is explicitly specified. Keeping stale values requires opt-in.
 
@@ -90,7 +92,7 @@ Domain join as first-class operation in preseed/kickstart : not a post-boot afte
 
 StartTLS deprecated in LDAP v4. RFC 4513 deprecated : the 2006 IETF decision to prefer StartTLS over LDAPS was wrong, practice and security analysis both confirm it. LDAPS only on port 636, mandatory, no exceptions, TLS from byte one. Plaintext port 389 removed. LDAP v5 : TLS mandatory at the protocol level, no plaintext negotiation path exists. StartTLS is a downgrade attack surface : plaintext window before upgrade, client can continue cleartext if upgrade fails.
 
-`ldapi:///` (Unix domain socket) retained exclusively as a break-glass operational recovery path, not a security mechanism : if you have root on the box you already own the directory. TLS required even over the socket, for uniformity with LDAPS (no special code path) and to prevent credential exposure to other local processes. Break-glass authentication requires username, password, and a client certificate stored on a YubiKey with non-exportable private key : box presence, credentials, physical key, and PIN. By the time break-glass is needed something has already gone wrong; identity must be unambiguous and fully auditable.
+`ldapi:///` (Unix domain socket) retained exclusively as a break-glass operational recovery path, not a security mechanism : if you have root on the box you already own the directory. TLS required even over the socket, for uniformity with LDAPS (no special code path) and to prevent credential exposure to other local processes. Break-glass authentication requires username, password, and a client certificate stored on a YubiKey with non-exportable private key : box presence, credentials, physical key, and PIN. By the time break-glass is needed something has already gone wrong; identity must be unambiguous and fully auditable. The break-glass client certificate is managed through `libcertstore`'s PKCS#11 module : same mechanism as any other hardware-token-backed cert, no separate cert management path for the break-glass account.
 
 Legacy cleartext proxy: a separate proxy program accepts plaintext on port 389, terminates TLS toward the server, and proxies the connection. Stepping-stone for apps that cannot be patched. In LDAP v5 the proxy is declared end-of-life and removed. No cleartext path exists anywhere in the stack after that.
 
@@ -98,9 +100,9 @@ Legacy cleartext proxy: a separate proxy program accepts plaintext on port 389, 
 
 No binary blobs. The directory is not a fileserver. Binary attribute syntaxes (OctetString for images, audio, certificates as inline data) are not supported. Photo and audio attributes store URLs only : `jpegPhotoURL`, `audioURL`. Clients are responsible for fetching and rendering. Swapping the file does not require touching the directory entry. Binary data does not bloat replication.
 
-`userCertificate` and related X.509 attributes stored inline as binary : temporary exception. Deprecated pending Kerberos 6 and a standardized cert store (see libcertstore). When the cert store is available, certificate attributes become URLs. Binary inline certs removed in LDAP v5.
+`userCertificate` and related X.509 attributes stored inline as binary : temporary exception. Deprecated pending Kerberos 6 and `libcertstore`, the canonical local certificate store. When `certstored` is available, certificate attributes become URLs pointing at `certstored`-served certs, retrieved via the daemon's signed delivery mechanism rather than embedded as binary blobs. Binary inline certs removed in LDAP v5.
 
-`sshPublicKey` (per draft-leverett-ldap-ssh-keys) mandatory on user entries, nullable. Public keys are not secret. Enables centralized `authorized_keys` management via `AuthorizedKeysCommand`. Clients pull directly from the directory. No binary, no URL indirection needed. Empty value permitted : Windows users and service accounts may have no SSH key.
+`sshPublicKey` (per draft-leverett-ldap-ssh-keys) mandatory on user entries, nullable. Public keys are not secret. Enables centralized `authorized_keys` management via `AuthorizedKeysCommand`. Clients pull directly from the directory. No binary, no URL indirection needed. Empty value permitted : Windows users and service accounts may have no SSH key. This attribute is the distribution mechanism for `libcertstore`'s SSH key rotation: `certctl rotate` rotates the key in the store, the new public key propagates via this attribute to every server's `AuthorizedKeysCommand`, and the client's `ssh-agent` picks up the new identity through `libcertstore`'s PKCS#11 module. No file copied by hand at any point in the chain.
 
 **Provisioning and Migration**
 
