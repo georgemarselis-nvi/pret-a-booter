@@ -88,6 +88,10 @@ All write operations atomic, auditable, and reversible. Every change logged with
 
 Domain join as first-class operation in preseed/kickstart : not a post-boot afterthought. Automount for clients included. Share configuration pushed from the directory. Policy lives in the directory, applied at provision time, enforced on drift : GPO equivalent, declarative, Ansible-backed.
 
+Default DIT structure mandatory, not advisory. LDAP v4 ships with a canonical DIT layout (`ou=users`, `ou=groups`, `ou=services`, etc.) baked into the spec, not left to each installation to invent independently. Every admin, every tool, every piece of documentation can assume the same baseline structure exists. No more `ou=people` vs `ou=users` vs `cn=Users` fragmentation across installations : that flexibility-with-no-default is exactly the failure mode the rest of this design rejects.
+
+AD-compatible alias layer : LDAP v4 supports a configurable alias mapping so the canonical DIT and schema can present themselves under Active Directory naming conventions (`cn=Users` aliasing to `ou=users`, attribute name aliasing for the handful of places AD and RFC schema diverge). Goal is 100% surface compatibility for AD-trained admins and AD-targeting tooling, without forcing the underlying directory to adopt AD's actual design flaws. Lowers the migration barrier for the largest population of directory admins in existence, who have only ever worked against AD.
+
 **Transport Security**
 
 StartTLS deprecated in LDAP v4. RFC 4513 deprecated : the 2006 IETF decision to prefer StartTLS over LDAPS was wrong, practice and security analysis both confirm it. LDAPS only on port 636, mandatory, no exceptions, TLS from byte one. Plaintext port 389 removed. LDAP v5 : TLS mandatory at the protocol level, no plaintext negotiation path exists. StartTLS is a downgrade attack surface : plaintext window before upgrade, client can continue cleartext if upgrade fails.
