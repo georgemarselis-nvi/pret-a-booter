@@ -182,3 +182,16 @@ ldapsearch -x -y ~/.ldappasswd "(uid=barbara)"
 # crack with hashcat (-m 111 = SSHA)
 /usr/bin/hashcat -m 111 '{SSHA}mlNdcAZ3XlPsIWTQoMZjbARljPjWm9H6' /usr/share/wordlists/rockyou.txt
 # TODO: crack {SSHA}mlNdcAZ3XlPsIWTQoMZjbARljPjWm9H6 over the weekend (password is 12345, verify the toolchain works)
+
+# TLS client verification (Chapter 4)
+# verify the cert chain locally
+openssl verify -CAfile /etc/letsencrypt/live/ldap.marsel.is/fullchain.pem /etc/letsencrypt/live/ldap.marsel.is/cert.pem
+# check what cert is being served on 636 and who issued it
+openssl s_client -connect ldap.marsel.is:636 -showcerts 2>/dev/null | openssl x509 -noout -issuer -subject
+# verify server cert against system trust store
+openssl s_client -connect ldap.marsel.is:636 2>/dev/null | grep "Verify return code"
+# test ldaps with simple bind (-x); requires TLS_CACERT in ldap.conf pointing at system store
+# TLS_CACERT /etc/ssl/certs/ca-certificates.crt
+ldapsearch -x -y ~/.ldappasswd -H ldaps://ldap.marsel.is -b dc=marsel,dc=is "(objectclass=*)"
+# TODO: create SASL user (uid= entry with userPassword: {SASL}username) after reading SASL section
+# TODO: configure SASL mechanism restriction to SCRAM-SHA-256/512 only in slapd.conf
