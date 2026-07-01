@@ -268,3 +268,17 @@ sasl-secprops noanonymous,noplaintext,noactive,nodictionary,minssf=0
 #
 # /etc/sasl2/slapd.conf:
 #   mech_list: SCRAM-SHA-512 SCRAM-SHA-256 GSSAPI
+
+## It Is 2026: Why Are We Still Negotiating?
+
+SASL's mechanism negotiation made sense in 1997 when nobody agreed on
+anything and every site ran something different. In 2026 there are two
+correct answers: GSSAPI if you have Kerberos, SCRAM-SHA-512 if you do not.
+Everything else in the mechanism list is either broken, obsolete, or a
+footgun waiting to be pulled.
+
+The negotiation framework is fine. The forty-year accumulation of mechanisms
+it hosts is not. A well-configured server in 2026 should advertise at most
+two mechanisms and reject everything else at the configuration level, not
+leave it up to the client to "pick the strongest it supports" while quietly
+also offering DIGEST-MD5 because nobody cleaned up the config file.
