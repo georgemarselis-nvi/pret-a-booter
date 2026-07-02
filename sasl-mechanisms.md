@@ -64,6 +64,13 @@ Everything else is someone else's problem.
 | OTP           | RFC 2444   | Undeployed      | S/KEY based one-time passwords; practically nobody uses this; TOTP is not the same thing                               |
 | NTLM          | -          | Avoid           | Microsoft proprietary; pass-the-hash vulnerable; relay attack vulnerable; deprecated by Microsoft in favor of Kerberos |
 
+## How Does It Work in Practice
+
+This section covers the practical mechanics of configuring SASL with OpenLDAP:
+creating users, configuring `slapd`, and verifying the setup.
+
+### saslpasswd2
+
 ## How Mechanism Lists Work
 
 `slapd` does not use all listed mechanisms simultaneously. It publishes a list
