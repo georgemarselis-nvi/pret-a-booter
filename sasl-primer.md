@@ -111,6 +111,49 @@ it supports and the authentication proceeds using only that mechanism. It
 does not mean they all are used together in sequence and all together must
 pass to authenticate (ORed rather than ANDed).
 
+## What Is Stored in The LDAP `userPassword` Attribute
+
+The generic form of the values `userPassword` can take is
+
+    {SCHEME}encoded-credential
+
+{SCHEME} can take on the following values: {CRYPT}, {MD5}, {SMD5}, {SHA},
+{SSHA}, {CLEARTEXT}, {SCRAM-SHA-1}, {SCRAM-SHA-256}, {SCRAM-SHA-512} .
+There is no {GSSAPI} because the `userPassword` attribute is removed from
+the DIT when LDAP is configured with GSSAPI support.
+
+As for the encoded-credential part, the canonical format for each algorithm
+is as follows, sans GSSAPI:
+
+| Scheme            | Format                                                                  |
+|:------------------|:------------------------------------------------------------------------|
+| `{CLEARTEXT}`     | `{CLEARTEXT}secret`                                                     |
+| `{CRYPT}`         | `{CRYPT}$6$salt$hash`                                                   |
+| `{MD5}`           | `{MD5}base64(md5(password))`                                            |
+| `{SMD5}`          | `{SMD5}base64(md5(password+salt)+salt)`                                 |
+| `{SHA}`           | `{SHA}base64(sha1(password))`                                           |
+| `{SSHA}`          | `{SSHA}base64(sha1(password+salt)+salt)`                                |
+| `{SCRAM-SHA-1}`   | `{SCRAM-SHA-1}iter,base64(salt),StoredKey,ServerKey`                    |
+| `{SCRAM-SHA-256}` | `{SCRAM-SHA-256}iter,base64(salt),StoredKey,ServerKey`                  |
+| `{SCRAM-SHA-512}` | `{SCRAM-SHA-512}iter,base64(salt),StoredKey,ServerKey`                  |
+
+{CLEARTEXT} is the `userPassword` storage scheme. PLAIN is the SASL
+mechanism name. Different naming applied to the same concept and yes,
+it is confusing.
+
+### Examples of values
+
+`{CLEARTEXT}secret`
+`{CRYPT}$6$salt$hash`
+`{MD5}rL0Y20zC+Fzt72VPzMSk2A==`
+`{SMD5}F4SBhNJUOBJfE0HLWkCkFQ==salt`
+`{SHA}W6ph5Mm5Pz8GgiULbPgzG37mj9g=`
+`{SSHA}W6ph5Mm5Pz8GgiULbPgzG37mj9gsalt`
+`{SCRAM-SHA-256}4096,c2FsdA==,StoredKey,ServerKey`
+`{SCRAM-SHA-512}4096,c2FsdA==,StoredKey,ServerKey`
+`{SCRAM-SHA-1}4096,c2FsdA==,StoredKey,ServerKey`
+
+
 ## Explaining Each of The Mechanisms
 
 ### How PLAIN Works
@@ -121,19 +164,28 @@ transmitted as-is.
 
 This is not as catastrophic as it sounds, provided TLS 1.3 is enforced at
 the transport layer before the bind is attempted. The password is
-cleartext at the SASL layer but encrypted by TLS on the wire. Without
+cleartext at the SASL layer but encrypted by TLS on the wire. But, without
 TLS, PLAIN is trivially interceptable.
 
-PLAIN does not require a secondary password database. It verifies against
-LDAP's `userPassword` attribute directly.
+PLAIN verifies the password hash against the `userPassword` attribute of
+LDAP directly.
 
 Never advertise PLAIN without `security simple_bind=256` in `slapd.conf`.
 
 ## How SCRAM-SHA-* Works
+So, 
+When using the algorithms, we do not store the  plaintext password in
+the `userPassword` attribut. Instead we use the SCRAM verifier: a salted,
+iterated hash derived from the password. The format is as follows:
+
+    {scheme}iter,salt,StoredKey,ServerKey
+
 
 SCRAM (Salted Challenge Response Authentication Mechanism, RFC 5802) is a
 mutual challenge-response authentication protocol. The password is never
 sent over the wire in any form.
+The server can verify a correct password against this without ever knowing
+the plaintext.
 
 ### The exchange
 
@@ -149,18 +201,7 @@ compares. If they match, the user is authenticated.
 also knows the verifier. This is mutual authentication: the client knows
 it is talking to the real server, not an impostor.
 
-### What is stored in the LDAP userPassword attribute
-
-Not the plaintext password. The SCRAM verifier: a salted, iterated hash
-derived from the password. Format:
-
-    {SCRAM-SHA-256}iter,salt,StoredKey,ServerKey
-
-The server can verify a correct password against this without ever
-knowing the plaintext. DIGEST-MD5 cannot do this. That is the entire
-point.
-
-### SCRAM-SHA-256 vs SCRAM-SHA-512
+### SCRAM-SHA-1 vs SCRAM-SHA-256 vs SCRAM-SHA-512
 
 These are the same authentication protocol, with SCRAM-SHA-512 using a
 longer hash. The only difference is the hash function used to derive the
@@ -169,6 +210,7 @@ harder to brute-force. SCRAM-SHA-512 is an OpenLDAP extension not yet in
 an RFC. Both store their verifiers in the same `userPassword` attribute
 as separate values, one per mechanism:
 
+    userPassword: {SCRAM-SHA-1}iter,salt,StoredKey,ServerKey
     userPassword: {SCRAM-SHA-256}iter,salt,StoredKey,ServerKey
     userPassword: {SCRAM-SHA-512}iter,salt,StoredKey,ServerKey
 
