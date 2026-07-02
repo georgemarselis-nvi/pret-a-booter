@@ -1,4 +1,4 @@
-# SASL Mechanisms Reference
+# SASL Primer
 
 For use with OpenLDAP slapd.conf
 
@@ -35,7 +35,8 @@ mechanisms it hosts range from "*fine*" (SCRAM) to "*what were they thinking*"
 
 The way it works: the server publishes a list of mechanisms it accepts.
 The client picks one. They do the exchange that mechanism requires.
-Done. The protocol continues. SASL gets out of the way.
+Done, you are authenticated. The protocol continues. SASL gets out of
+the way.
 
 The catch: SASL is only as good as the mechanism you pick. Picking
 DIGEST-MD5 because it was the mandatory LDAPv3 mechanism in 2000 means
@@ -43,10 +44,11 @@ storing cleartext passwords in a separate database nobody syncs.
 Picking SCRAM-SHA-256 means doing it correctly. Picking GSSAPI means
 not storing passwords in LDAP at all, which is the correct-most answer.
 
-SASL does not encrypt the connection. That is the job of TLS. SASL does not
-store passwords. That is the job of LDAP (or, more correctly, the job of
-Kerberos, if you have any self-respect). SASL negotiates who you are.
-Everything else is someone else's problem.
+SASL does not encrypt the connection by default. TLS, in practice, handles the
+security layer after authentication, but some mechanisms, such as DIGEST-MD5,
+make use of a secondary password database, which is completely separate from the
+system one. SASL negotiates who you are. Everything else is the problem of TLS.
+See below in "How DIGEST-MD5 Works (and Why It Is Broken)".
 
 ## All SASL Mechanisms
 
@@ -64,13 +66,6 @@ Everything else is someone else's problem.
 | OTP           | RFC 2444   | Undeployed      | S/KEY based one-time passwords; practically nobody uses this; TOTP is not the same thing                               |
 | NTLM          | -          | Avoid           | Microsoft proprietary; pass-the-hash vulnerable; relay attack vulnerable; deprecated by Microsoft in favor of Kerberos |
 
-## How Does It Work in Practice
-
-This section covers the practical mechanics of configuring SASL with OpenLDAP:
-creating users, configuring `slapd`, and verifying the setup.
-
-### saslpasswd2
-
 ## How Mechanism Lists Work
 
 `slapd` does not use all listed mechanisms simultaneously. It publishes a list
@@ -81,6 +76,21 @@ the authentication proceeds using only that mechanism.
 Listing multiple mechanisms means: "I will accept any of these". It does not
 mean they all are used together in sequence and all together must pass to
 authenticate.
+
+## How PLAIN Works
+
+PLAIN sends the username and password in cleartext in a single step. There is
+no challenge, no response, no hashing. The password is transmitted as-is.
+
+This is not as catastrophic as it sounds, provided TLS 1.3 is enforced at the
+transport layer before the bind is attempted. The password is cleartext at the
+SASL layer but encrypted by TLS on the wire. Without TLS, PLAIN is trivially
+interceptable.
+
+PLAIN does not require a secondary password database. It verifies against
+LDAP's `userPassword` attribute directly.
+
+Never advertise PLAIN without `security simple_bind=256` in `slapd.conf`.
 
 ## How SCRAM-SHA-* Works
 
@@ -127,6 +137,30 @@ one per mechanism:
 `slapd`, when authenticating, picks up the appropriate attribute value for
 the mechanism the client selected.
 
+## How GSSAPI Works
+
+GSSAPI (Generic Security Services API, RFC 4752) is the SASL wrapper around
+Kerberos 5. The client obtains a Kerberos ticket from the KDC and presents it
+to `slapd` as proof of identity. No password is sent. No password is stored
+in LDAP. `slapd` verifies the ticket against its keytab file.
+
+The exchange:
+
+1. Client obtains a Kerberos service ticket for the LDAP service from the KDC.
+2. Client sends the ticket to `slapd` via the GSSAPI exchange.
+3. `slapd` verifies the ticket using its keytab (`/etc/krb5.keytab` or
+   `/etc/ldap/ldap.keytab`).
+4. If valid, the client is authenticated as the Kerberos principal in the ticket.
+5. Mutual authentication: the server also proves its identity to the client.
+
+GSSAPI requires:
+- A Kerberos KDC with the user enrolled
+- A service principal for LDAP (`ldap/ldap.marsel.is@MARSEL.IS`)
+- A keytab on the `slapd` host containing that service principal's key
+
+No passwords in LDAP. No `sasldb2`. No secondary database. This is why
+GSSAPI is the correct long-term answer.
+
 ## How EXTERNAL Works
 
 EXTERNAL is not a password mechanism. It uses the TLS client certificate as
@@ -147,6 +181,77 @@ This mechanism requires the client to have a certificate issued by a CA that
 the server trusts (`TLS_CACERT` in `ldap.conf` / `TLSCACertificateFile` in
 `slapd.conf`). If the cert is valid and trusted, the client is authenticated
 as the subject DN in the cert.
+
+## How DIGEST-MD5 Works (and Why It Is Broken)
+
+DIGEST-MD5 is a challenge-response protocol. The server generates a random
+challenge; the client combines the challenge with the plaintext password using
+MD5 and sends the result. The server does the same computation and compares.
+
+The problem: for the server to verify the response, it must know the plaintext
+password. LDAP stores passwords hashed. Hashes are one-way. DIGEST-MD5 cannot
+use LDAP's `userPassword`.
+
+The "solution" is `sasldb2`: a separate Berkeley DB file storing the same
+passwords in cleartext, maintained manually with `saslpasswd2`. No sync with
+LDAP. A user can have a different password in each store with no warning.
+
+DIGEST-MD5 was deprecated in RFC 6331 (2011). Do not use it.
+Do not use `sasldb2` for anything.
+
+### saslpasswd2
+
+`saslpasswd2` is the tool used to add users to `sasldb2`. It stores both the
+username and the password in the database. The password is stored in cleartext.
+It has no connection to LDAP's `userPassword`. A user can have a completely
+different password in `sasldb2` than in LDAP with no warning and no enforcement.
+
+    saslpasswd2 -c -u example.com matt   # create user matt in realm example.com
+
+This is only relevant if you are using DIGEST-MD5, which you should not be.
+
+## How CRAM-MD5 Works
+
+CRAM-MD5 (Challenge-Response Authentication Mechanism, RFC 2195) is similar
+to DIGEST-MD5: the server sends a challenge, the client hashes it with the
+password using HMAC-MD5 and replies. The server verifies.
+
+Same problem as DIGEST-MD5: requires plaintext or reversibly encrypted
+passwords on the server. Also has no mutual authentication -- the client
+cannot verify it is talking to the real server. Vulnerable to offline
+dictionary attacks against captured challenge-response pairs.
+
+Superseded by SCRAM. Do not use.
+
+## How OTP Works (and Why It Is Not TOTP)
+
+OTP (One-Time Password, RFC 2444) is based on S/KEY: a hash chain derived
+from a seed and a passphrase. Each authentication consumes one value from
+the chain. Once the chain is exhausted, it must be regenerated.
+
+OTP has nothing to do with TOTP (Time-based One-Time Password, RFC 6238),
+which is what Google Authenticator, Authy and similar apps use. TOTP is not
+a SASL mechanism. OTP predates TOTP by a decade and works completely
+differently.
+
+OTP is practically undeployed. No major directory service uses it. Listed
+here for completeness.
+
+## How NTLM Works (and Why to Avoid It)
+
+NTLM (NT LAN Manager) is Microsoft's proprietary challenge-response
+authentication protocol. The server sends a challenge; the client responds
+using an NT hash of the password.
+
+Problems:
+
+- Pass-the-hash: an attacker who captures the NT hash can authenticate
+  without knowing the plaintext password.
+- Relay attacks: NTLM responses can be relayed to other services.
+- No mutual authentication in NTLMv1.
+- Microsoft itself deprecated NTLM in favor of Kerberos.
+
+NTLM has no business in a Unix LDAP stack. Do not advertise it.
 
 ## Why DIGEST-MD5 requires sasldb2 (and why that is a disaster)
 
@@ -272,6 +377,7 @@ sasl-secprops noanonymous,noplaintext,noactive,nodictionary,minssf=0
 #
 # To restrict which mechanisms are offered, use mech_list in /etc/sasl2/slapd.conf:
 # (not a slapd.conf directive -- controlled via the Cyrus SASL config file)
+# authz-regexp uses POSIX extended regex (ERE, same as grep -E, via POSIX regex.h).
 #
 # /etc/sasl2/slapd.conf:
 #   mech_list: SCRAM-SHA-512 SCRAM-SHA-256 GSSAPI
@@ -281,7 +387,7 @@ sasl-secprops noanonymous,noplaintext,noactive,nodictionary,minssf=0
 SASL's mechanism negotiation made sense in 1997 when nobody agreed on
 anything and every site ran something different. In 2026 there are two
 correct answers: GSSAPI if you have Kerberos, SCRAM-SHA-512 if you do not.
-Everything else in the mechanism list is either broken, obsolete, or a
+Everything else in the mechanism list is either broken, obsolete or a
 footgun waiting to be pulled.
 
 The negotiation framework is fine. The forty-year accumulation of mechanisms
