@@ -17,10 +17,11 @@ Public License for more details.
 You should have received a copy of the GNU General Public License along
 with this program. If not, see <https://www.gnu.org/licenses/>.
 
-## Why did we make this file?
+## Why does this file exist?
 
 Cuz I needed to explain the basics of SASL to myself without going through
-the trauma of being a Dunkirk survivor.
+the trauma of being a Dunkirk survivor. And I could not find such a primer
+on the Internet.
 
 ## What is SASL?
 
@@ -49,7 +50,7 @@ port, one protocol. Then you open the door and thirty years of
 negotiation mechanisms slide out and bury you.
 
 The catch is SASL is only as good as the mechanism you pick. For example,
-picking DIGEST-MD5[^1]: it was the mandatory LDAPv3 mechanism in the
+picking DIGEST-MD5: it was the mandatory LDAPv3 mechanism in the
 2000s, and using it meant you had to store cleartext passwords in a
 separate from-the-system database, which there was no way to automatically
 keep in sync with the system one. And the glue for the functionality
@@ -92,6 +93,7 @@ thought it was an elegant solution.
 |:--------------|:-----------|:----------------|:-----------------------------------------------------------------------------------------------------------------------|
 | PLAIN         | RFC 4616   | Usable          | Cleartext password; relies entirely on TLS for security; never use without TLS 1.3                                     |
 | LOGIN         | -          | Obsolete        | Alias for PLAIN with no additional security; superseded                                                                |
+| ANONYMOUS     | RFC 4505   | Special-purpose | No credentials at all; equivalent of anonymous bind; disable unless you have a specific reason                         |
 | DIGEST-MD5    | RFC 6331   | Broken          | Cryptographically broken; deprecated 2011; do not deploy                                                               |
 | CRAM-MD5      | RFC 2195   | Weak            | No mutual authentication; vulnerable to offline dictionary attacks                                                     |
 | SCRAM-SHA-1   | RFC 5802   | Acceptable      | Minimum acceptable SCRAM; prefer SHA-256 or SHA-512 if available                                                       |
@@ -170,9 +172,25 @@ cleartext at the SASL layer but encrypted by TLS on the wire. But, without
 TLS, PLAIN is trivially interceptable.
 
 PLAIN verifies the password hash against the `userPassword` attribute of
-LDAP directly.
+LDAP directly. Note: `slapd` short-circuits PLAIN internally against
+`userPassword`; it does not go through Cyrus SASL's usual `auxprop` or
+`saslauthd` verification path the way other daemons do.
 
 Never advertise PLAIN without `security simple_bind=256` in `slapd.conf`.
+
+### How ANONYMOUS Works
+
+ANONYMOUS (RFC 4505) is the SASL mechanism for deliberately
+authenticating as nobody. The client sends an optional trace string
+(usually an email address) and the server grants an unauthenticated
+session. It is the SASL equivalent of LDAP anonymous bind.
+
+There is no credential, no verification, nothing. It exists so protocols
+that mandate SASL can still offer guest access.
+
+We disable anonymous access everywhere (`disallow bind_anon` in
+`slapd.conf` and `noanonymous` in `sasl-secprops`). Documented here for
+completeness.
 
 ## How SCRAM-SHA-* Works
 
@@ -180,7 +198,9 @@ When using the algorithms, we do not store the plaintext password in
 the `userPassword` attribute. Instead we use the SCRAM verifier: a salted,
 iterated hash derived from the password. The format is as follows:
 
+```
     {scheme}iter,salt,StoredKey,ServerKey
+```
 
 SCRAM (Salted Challenge Response Authentication Mechanism, RFC 5802) is a
 mutual challenge-response authentication protocol. The password is never
@@ -210,9 +230,11 @@ harder to brute-force. SCRAM-SHA-512 is an OpenLDAP extension not yet in
 an RFC. Both store their verifiers in the same `userPassword` attribute
 as separate values, one per mechanism:
 
+```
     userPassword: {SCRAM-SHA-1}iter,salt,StoredKey,ServerKey
     userPassword: {SCRAM-SHA-256}iter,salt,StoredKey,ServerKey
     userPassword: {SCRAM-SHA-512}iter,salt,StoredKey,ServerKey
+```
 
 `slapd`, when authenticating, picks up the appropriate attribute value
 for the mechanism the client selected.
@@ -454,7 +476,7 @@ No package beyond `libsasl2-2` (installed with `slapd`). No
 PLAIN binds:
 
 ```
-# slapd.conf
+# /etc/sasl2/slapd.conf
 security simple_bind=256
 ```
 
@@ -468,6 +490,14 @@ mech_list: SCRAM-SHA-512 SCRAM-SHA-256
 ```
 
 **Not recommended.**
+
+### ANONYMOUS
+
+Included in `libsasl2-modules`. No configuration needed to disable it:
+keep it out of `mech_list` and set `disallow bind_anon` in `slapd.conf`
+plus `noanonymous` in `sasl-secprops`.
+
+**Not recommended.** Disable everywhere.
 
 ### SCRAM-SHA-1, SCRAM-SHA-256, SCRAM-SHA-512
 
@@ -494,24 +524,32 @@ in `userPassword` automatically.
 
 Install the MIT or Heimdal module (pick one):
 
+```
     apt install libsasl2-modules-gssapi-mit
     apt install libsasl2-modules-gssapi-heimdal
+```
 
 Create a service principal and export a keytab:
 
+```
     kadmin -p admin/admin
     kadmin: addprinc -randkey ldap/ldap.marsel.is@MARSEL.IS
     kadmin: ktadd -k /etc/ldap/ldap.keytab ldap/ldap.marsel.is@MARSEL.IS
+```
 
 Set ownership and permissions:
 
+```
     chown openldap:openldap /etc/ldap/ldap.keytab
     chmod 600 /etc/ldap/ldap.keytab
+```
 
 Point `slapd` at the keytab via a systemd override or
 `/etc/default/slapd`:
 
+```
     export KRB5_KTNAME=/etc/ldap/ldap.keytab
+```
 
 Add to `/etc/sasl2/slapd.conf`:
 
@@ -546,7 +584,9 @@ authz-regexp "^cn=([^,]+),.*$"
 
 **Not recommended.** Documented here for completeness only.
 
+```
     apt install libsasl2-modules sasl2-bin
+```
 
 ```
 # /etc/sasl2/slapd.conf
@@ -557,7 +597,9 @@ mech_list: DIGEST-MD5
 
 Add users to `sasldb2`:
 
+```
     saslpasswd2 -c -u marsel.is username
+```
 
 **Do not deploy.**
 
@@ -565,7 +607,9 @@ Add users to `sasldb2`:
 
 **Not recommended.** Same `sasldb2` requirement as DIGEST-MD5.
 
+```
     apt install libsasl2-modules sasl2-bin
+```
 
 ```
 # /etc/sasl2/slapd.conf
@@ -587,7 +631,9 @@ package needed. Add `NTLM` to `mech_list` in `/etc/sasl2/slapd.conf`.
 
 Practically undeployed. Documented here for completeness only.
 
+```
     apt install libsasl2-modules-otp sasl2-bin
+```
 
 ```
 # /etc/sasl2/slapd.conf
@@ -602,36 +648,38 @@ Initialize credentials:
 
 ## slapd.conf: sasl-secprops
 
+sasl-secprops controls which mechanisms slapd will offer and minimum
+security requirements. Format: comma-separated list of properties.
+
+Properties:
+  noanonymous     do not allow anonymous (no-credential) SASL binds
+  noplaintext     do not allow plaintext (PLAIN/LOGIN) mechanisms
+  noactive        do not allow mechanisms vulnerable to active attacks
+                  (DIGEST-MD5, CRAM-MD5)
+  nodictionary    do not allow mechanisms vulnerable to dictionary attacks
+  forward_secrecy require forward secrecy (mechanisms that provide PFS)
+  minssf=N        minimum SSF the SASL layer must provide
+                  (0=none, 256=AES-256)
+  maxssf=N        maximum SSF the SASL layer may provide
+  maxbufsize=N    maximum SASL buffer size (default 65536)
+
+For our setup (SCRAM-SHA-256/512, GSSAPI, no plaintext, no broken
+mechanisms):
 ```
-# sasl-secprops controls which mechanisms slapd will offer and minimum
-# security requirements. Format: comma-separated list of properties.
-#
-# Properties:
-#   noanonymous     do not allow anonymous (no-credential) SASL binds
-#   noplaintext     do not allow plaintext (PLAIN/LOGIN) mechanisms
-#   noactive        do not allow mechanisms vulnerable to active attacks
-#                   (DIGEST-MD5, CRAM-MD5)
-#   nodictionary    do not allow mechanisms vulnerable to dictionary attacks
-#   forward_secrecy require forward secrecy (mechanisms that provide PFS)
-#   minssf=N        minimum SSF the SASL layer must provide
-#                   (0=none, 256=AES-256)
-#   maxssf=N        maximum SSF the SASL layer may provide
-#   maxbufsize=N    maximum SASL buffer size (default 65536)
-#
-# For our setup (SCRAM-SHA-256/512, GSSAPI, no plaintext, no broken
-# mechanisms):
-sasl-secprops noanonymous,noplaintext,noactive,nodictionary,minssf=0
-#
-# minssf=0 because the security directive in slapd.conf already enforces
-# ssf=256 at the connection level before SASL runs. There is no need for
-# the SASL layer to re-enforce the same requirement, though it is not
-# unheard of.
-#
-# To restrict which mechanisms are offered, use mech_list in
-# /etc/sasl2/slapd.conf (not a slapd.conf directive):
-#
-# /etc/sasl2/slapd.conf:
-#   mech_list: SCRAM-SHA-512 SCRAM-SHA-256 GSSAPI
+    sasl-secprops noanonymous,noplaintext,noactive,nodictionary,minssf=0
+```
+
+minssf=0 because the security directive in slapd.conf already enforces
+ssf=256 at the connection level before SASL runs. There is no need for
+the SASL layer to re-enforce the same requirement, though it is not
+unheard of.
+
+To restrict which mechanisms are offered, use mech_list in
+/etc/sasl2/slapd.conf (not a slapd.conf directive):
+
+```
+/etc/sasl2/slapd.conf:
+    mech_list: SCRAM-SHA-512 SCRAM-SHA-256 GSSAPI
 ```
 
 ## It Is 2026: Why Are We Still Negotiating?
@@ -648,5 +696,3 @@ advertise at most two mechanisms and reject everything else at the
 configuration level, not leave it up to the client to "pick the strongest
 it supports" while quietly also offering DIGEST-MD5 because nobody
 cleaned up the config file.
-
-[^1]: See below in "How DIGEST-MD5 Works (and Why It Is Broken)".
