@@ -19,9 +19,9 @@ with this program. If not, see <https://www.gnu.org/licenses/>.
 
 ## Why does this file exist?
 
-Cuz I needed to explain the basics of SASL to myself without going through
-the trauma of being a Dunkirk survivor. And I could not find such a primer
-on the Internet.
+I needed to explain the basics of SASL to myself without going through the
+trauma of being a Dunkirk survivor. And I could not find such a primer on
+the Internet.
 
 ## What is SASL?
 
@@ -37,36 +37,37 @@ The client picks one. They do the exchange that mechanism requires. If
 successful, the protocol gets a "we are good to go" answer and continues.
 
 The "Simple" in the name is earned: the framework itself is simple. The
-mechanisms it accumulated over thirty years are not. Some are broken.
-Some are obsolete. Some share names close enough to confuse a junior
-admin into picking the wrong one. SASL did not cause this, just
+problem is the mechanisms it accumulated over thirty years. Some are
+broken. Some are obsolete. Some share names close enough to confuse a
+junior admin into picking the wrong one. SASL did not cause this, just
 inherited it. In the 1990s, the IETF kept adding new mechanisms to the
 framework, as authentication research evolved. Backwards compatibility
-meant every mechanism ever defined stayed on the list. You inherit all
-of them, broken ones included. The mechanisms range from "*fine*"
-(SCRAM) to "*what were they thinking*" (DIGEST-MD5) to "*Kill it with
-fire*" (NTLM). SASL looks simple from the outside: one connection, one
-port, one protocol. Then you open the door and thirty years of
-negotiation mechanisms slide out and bury you.
+meant retaining every mechanism ever defined stayed on the list. You
+inherit all of them, lock, stock and barrel. The mechanisms range from
+"*fine*" (SCRAM) to "*what were they thinking*" (DIGEST-MD5) to "*Kill
+it with fire*" (NTLM). SASL looks simple from the outside: one
+connection, one port, one protocol. Then you open the door and thirty
+years of negotiation mechanisms slide out and bury you.
 
-The catch is SASL is only as good as the mechanism you pick. For example,
-picking DIGEST-MD5: it was the mandatory LDAPv3 mechanism in the
-2000s, and using it meant you had to store cleartext passwords in a
+The other catch is SASL is only as good as the mechanism you pick. For
+example, picking DIGEST-MD5: it was the mandatory LDAPv3 mechanism in
+the 2000s and using it meant you had to store cleartext passwords in a
 separate from-the-system database, which there was no way to automatically
 keep in sync with the system one. And the glue for the functionality
 was not provided. So, you had two password databases and everybody
-had to make their own glue. On the other hand, picking SCRAM-SHA-256
-meant doing it correctly, because no passwords or hashes were ever
-exchanged, but SCRAM-SHA-256 meant that you had to invest in a time
-machine because it did not exist in the 1990s (RFC 5802, 2010). And
-then there was GSSAPI: Picking it meant not storing passwords in LDAP
-at all, which is the most correct answer of them all, but picking GSSAPI
-meant reading the source code for the MIT Kerberos to understand what
-is going on, before implementing for your site.
+had to make their own glue. So, it sucked. On the other hand, picking
+SCRAM-SHA-256 meant doing it correctly, because no passwords or hashes
+were ever exchanged. But picking SCRAM-SHA-256 meant that you had to
+invest in a time machine because it did not exist in the 1990s (RFC
+5802, 2010). And then there was GSSAPI: Picking it meant not storing
+passwords in LDAP at all, which is the most correct answer of them
+all, but picking GSSAPI meant reading the source code for the MIT
+Kerberos to understand what is going on, before implementing GSSAPI
+for your site.
 
-SASL does not encrypt the connection by default. TLS, in practice,
-handles the encryption layer after authentication. SASL negotiates who
-you are. Everything else is the problem of TLS.
+Furthermore, SASL does not encrypt the connection by default. In
+practice, TLS handles the encryption layer after authentication. SASL
+negotiates who you are. Everything else is the problem of TLS.
 
 ## Why Create a Protocol That Handles Negotiation at All?
 
@@ -80,14 +81,18 @@ works with any protocol. Write SCRAM-SHA-256 once. Use it in SMTP, IMAP,
 LDAP and anything else that speaks SASL. The protocol says "authenticate
 me" and SASL handles the rest.
 
-The framework is sound. The mechanisms it accumulated over thirty years
-are the problem. The 1990s were still Wild-Wild West territory on the
-Internet. Essentially, it was the equivalent of building the railroad
-network. So, people threw shit on the wall and saw what stuck. And while
-I can now look back and make easy criticism, people at the time honestly
-thought it was an elegant solution.
+So, the framework is sound. The mechanisms it accumulated over thirty
+years are the problem. The 1990s were still Wild-Wild West territory
+on the Internet. Essentially, it was the equivalent of building the
+railroad network. Authentication wise, people threw shit on the wall
+and saw what stuck. And while I can now look back and make easy
+criticism, people at the time honestly thought it was an elegant
+solution. History now has shown otherwise and a lot of protocols are
+going back to having one less dependency.
 
 ## All SASL Mechanisms
+
+Alright, let us take a look at the list of all the available mechcanisms as per July 2026:
 
 | Mechanism     | RFC        | Status          | Notes                                                                                                                  |
 |:--------------|:-----------|:----------------|:-----------------------------------------------------------------------------------------------------------------------|
@@ -115,17 +120,19 @@ pass to authenticate (ORed rather than ANDed).
 
 ## What Is Stored in The LDAP `userPassword` Attribute
 
-The generic form of the values `userPassword` can take is
+The generic form of the values `userPassword` stores is
 
+```
     {SCHEME}encoded-credential
+```
 
-{SCHEME} can take on the following values: {CRYPT}, {MD5}, {SMD5}, {SHA},
-{SSHA}, {CLEARTEXT}, {SCRAM-SHA-1}, {SCRAM-SHA-256}, {SCRAM-SHA-512} .
+`{SCHEME}` can take on the following values: `{CRYPT}`, `{MD5}`, `{SMD5}`, `{SHA}`,
+`{SSHA}`, `{CLEARTEXT}`, `{SCRAM-SHA-1}`, `{SCRAM-SHA-256}`, `{SCRAM-SHA-512}`.
 There is no {GSSAPI} because the `userPassword` attribute is removed from
 the DIT when LDAP is configured with GSSAPI support.
 
 As for the encoded-credential part, the canonical format for each algorithm
-is as follows, sans GSSAPI:
+is as follows:
 
 | Scheme            | Format                                                                  |
 |:------------------|:------------------------------------------------------------------------|
@@ -143,7 +150,7 @@ is as follows, sans GSSAPI:
 mechanism name. Different naming applied to the same concept and yes,
 it is confusing.
 
-We will go through the details of each algorithm below.
+We will go through the details of each mechanism below.
 
 ### Examples of values
 
@@ -156,7 +163,6 @@ We will go through the details of each algorithm below.
 `{SCRAM-SHA-256}4096,c2FsdA==,StoredKey,ServerKey`
 `{SCRAM-SHA-512}4096,c2FsdA==,StoredKey,ServerKey`
 `{SCRAM-SHA-1}4096,c2FsdA==,StoredKey,ServerKey`
-
 
 ## Explaining Each of The Mechanisms
 
