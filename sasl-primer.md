@@ -19,8 +19,8 @@ with this program. If not, see <https://www.gnu.org/licenses/>.
 
 ## Why did we make this file?
 
-Cuz I needed to explain the basics of SASL without you needed to go
-through the trauma of being a Dunkirk survivor.
+Cuz I needed to explain the basics of SASL to myself without going through
+the trauma of being a Dunkirk survivor.
 
 ## What is SASL?
 
