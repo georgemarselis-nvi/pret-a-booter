@@ -42,12 +42,12 @@ broken. Some are obsolete. Some share names close enough to confuse a
 junior admin into picking the wrong one. SASL did not cause this, just
 inherited it. In the 1990s, the IETF kept adding new mechanisms to the
 framework, as authentication research evolved. Backwards compatibility
-meant retaining every mechanism ever defined stayed on the list. You
-inherit all of them, lock, stock and barrel. The mechanisms range from
-"*fine*" (SCRAM) to "*what were they thinking*" (DIGEST-MD5) to "*Kill
-it with fire*" (NTLM). SASL looks simple from the outside: one
-connection, one port, one protocol. Then you open the door and thirty
-years of negotiation mechanisms slide out and bury you.
+meant every mechanism ever defined stayed on the list. You inherit all
+of them, lock, stock and barrel. The mechanisms range from "*fine*"
+(SCRAM) to "*what were they thinking*" (DIGEST-MD5) to "*Kill it with
+fire*" (NTLM). SASL looks simple from the outside: one connection, one
+port, one protocol. Then you open the door and thirty years of
+negotiation mechanisms slide out and bury you.
 
 The other catch is SASL is only as good as the mechanism you pick. For
 example, picking DIGEST-MD5: it was the mandatory LDAPv3 mechanism in
@@ -92,7 +92,7 @@ going back to having one less dependency.
 
 ## All SASL Mechanisms
 
-Alright, let us take a look at the list of all the available mechcanisms as per July 2026:
+Alright, let us take a look at the list of all the available mechanisms as per July 2026:
 
 | Mechanism     | RFC        | Status          | Notes                                                                                                                  |
 |:--------------|:-----------|:----------------|:-----------------------------------------------------------------------------------------------------------------------|
@@ -164,6 +164,32 @@ We will go through the details of each mechanism below.
 `{SCRAM-SHA-512}4096,c2FsdA==,StoredKey,ServerKey`
 `{SCRAM-SHA-1}4096,c2FsdA==,StoredKey,ServerKey`
 
+## Which Mechanism Reads What
+
+Not every mechanism reads `userPassword`. This is the single most
+confusing part of SASL with OpenLDAP, so here it is spelled out:
+
+| Mechanism            | Verifies against                                                  |
+|:---------------------|:------------------------------------------------------------------|
+| PLAIN                | `userPassword` in LDAP, all values, any `{SCHEME}`                |
+| SCRAM-SHA-1/256/512  | `userPassword` in LDAP, only the exact matching `{SCRAM-*}` value |
+| GSSAPI               | Kerberos keytab; `userPassword` ignored                           |
+| EXTERNAL             | TLS client cert; `userPassword` ignored                           |
+| DIGEST-MD5           | `sasldb2` only; `userPassword` ignored                            |
+| CRAM-MD5             | `sasldb2` only; `userPassword` ignored                            |
+| OTP                  | `sasldb2` only; `userPassword` ignored                            |
+| NTLM                 | `sasldb2` only; `userPassword` ignored                            |
+
+The consequence: if a client authenticates with DIGEST-MD5 and the user
+only has a `{CLEARTEXT}` value in `userPassword`, authentication fails.
+DIGEST-MD5 never reads `userPassword`, so the value is invisible to it.
+The user must exist in `sasldb2` or there is nothing to verify against.
+
+Same logic for SCRAM: if a client picks SCRAM-SHA-512 and the entry only
+has a `{SCRAM-SHA-256}` verifier, authentication fails. SCRAM needs the
+stored verifier's salt and iteration count for the exact hash the client
+selected, before the client sends its proof. No verifier, no exchange.
+
 ## Explaining Each of The Mechanisms
 
 ### How PLAIN Works
@@ -177,10 +203,20 @@ the transport layer before the bind is attempted. The password is
 cleartext at the SASL layer but encrypted by TLS on the wire. But, without
 TLS, PLAIN is trivially interceptable.
 
-PLAIN verifies the password hash against the `userPassword` attribute of
-LDAP directly. Note: `slapd` short-circuits PLAIN internally against
-`userPassword`; it does not go through Cyrus SASL's usual `auxprop` or
-`saslauthd` verification path the way other daemons do.
+Remember that the `userPassword` attribute can exist more than once
+within `person` or `posixAccount`. When a client uses the PLAIN
+mechanism, it sends the password to `slapd`, bypassing SASL. `slapd`
+then verifies the supplied password against all existing `userPassword`
+values, regardless of what their `{SCHEME}` is: for each value, it
+hashes the supplied password with that value's scheme and compares.
+First match wins. If you are screaming in your head "THIS IS STUPID",
+you are right: the weakest stored value is the attack surface.
+
+In contrast, the SMTP and IMAP daemons hand the password to SASL, which
+verifies via `auxprop` (a SASL plugin that reads a local password
+database) or `saslauthd` (a SASL daemon that forwards the check to PAM).
+That is the difference: for those daemons, SASL checks the password.
+For `slapd`, LDAP does.
 
 Never advertise PLAIN without `security simple_bind=256` in `slapd.conf`.
 
@@ -227,14 +263,19 @@ compares. If they match, the user is authenticated.
 also knows the verifier. This is mutual authentication: the client knows
 it is talking to the real server, not an impostor.
 
+Unlike PLAIN, there is no trying of every value: `slapd` looks for the
+`userPassword` value whose `{SCHEME}` exactly matches the SCRAM variant
+the client selected. No matching verifier, no exchange, authentication
+fails.
+
 ### SCRAM-SHA-1 vs SCRAM-SHA-256 vs SCRAM-SHA-512
 
 These are the same authentication protocol, with SCRAM-SHA-512 using a
 longer hash. The only difference is the hash function used to derive the
 keys and proof. As SHA-512 produces a longer hash, it is computationally
 harder to brute-force. SCRAM-SHA-512 is an OpenLDAP extension not yet in
-an RFC. Both store their verifiers in the same `userPassword` attribute
-as separate values, one per mechanism:
+an RFC. All three store their verifiers in the same `userPassword`
+attribute as separate values, one per mechanism:
 
 ```
     userPassword: {SCRAM-SHA-1}iter,salt,StoredKey,ServerKey
@@ -251,7 +292,7 @@ GSSAPI (Generic Security Services API, RFC 4752) is the SASL wrapper
 around Kerberos 5. The client obtains a Kerberos ticket from the KDC and
 presents it to `slapd` as proof of identity. No password is sent. No
 password is stored in LDAP. `slapd` verifies the ticket against its
-keytab file.
+keytab file. The `userPassword` attribute is never read.
 
 The exchange:
 
@@ -280,10 +321,10 @@ as the authentication credential. When the client connects, it presents a
 client certificate during the TLS handshake as the authentication token.
 `slapd` reads the subject DN from that certificate and uses it as the
 authenticated identity. No password is exchanged and there is no
-challenge-response. The cert is the credential. EXTERNAL is used for
-authentication only: it establishes identity from the cert and nothing
-else. Encryption and integrity are provided by the TLS layer, not by
-EXTERNAL.
+challenge-response. The `userPassword` attribute is never read. The cert
+is the credential. EXTERNAL is used for authentication only: it
+establishes identity from the cert and nothing else. Encryption and
+integrity are provided by the TLS layer, not by EXTERNAL.
 
 The name EXTERNAL is a misnomer. It refers to the fact that the
 credential comes from outside SASL itself (specifically, from the TLS
@@ -304,7 +345,8 @@ computation and compares.
 
 The problem: for the server to verify the response, it must know the
 plaintext password. LDAP stores passwords hashed. Hashes are one-way.
-DIGEST-MD5 cannot use LDAP's `userPassword`.
+DIGEST-MD5 cannot use LDAP's `userPassword`. It never reads it. Even a
+`{CLEARTEXT}` value is invisible to it.
 
 The "solution" is `sasldb2`: a separate Berkeley DB file storing the same
 passwords in cleartext, maintained manually with `saslpasswd2`. No sync
@@ -334,9 +376,10 @@ similar to DIGEST-MD5: the server sends a challenge, the client hashes it
 with the password using HMAC-MD5 and replies. The server verifies.
 
 Same problem as DIGEST-MD5: requires plaintext or reversibly encrypted
-passwords on the server. Also has no mutual authentication — the client
-cannot verify it is talking to the real server. Vulnerable to offline
-dictionary attacks against captured challenge-response pairs.
+passwords on the server, so it verifies against `sasldb2` and never reads
+`userPassword`. Also has no mutual authentication: the client cannot
+verify it is talking to the real server. Vulnerable to offline dictionary
+attacks against captured challenge-response pairs.
 
 Superseded by SCRAM. Do not use.
 
@@ -344,7 +387,8 @@ Superseded by SCRAM. Do not use.
 
 OTP (One-Time Password, RFC 2444) is based on S/KEY: a hash chain derived
 from a seed and a passphrase. Each authentication consumes one value from
-the chain. Once the chain is exhausted, it must be regenerated.
+the chain. Once the chain is exhausted, it must be regenerated. The chain
+state lives in `sasldb2`; `userPassword` is never read.
 
 OTP has nothing to do with TOTP (Time-based One-Time Password, RFC 6238),
 which is what Google Authenticator, Authy and similar apps use. TOTP is
@@ -358,7 +402,8 @@ here for completeness.
 
 NTLM (NT LAN Manager) is Microsoft's proprietary challenge-response
 authentication protocol. The server sends a challenge; the client
-responds using an NT hash of the password.
+responds using an NT hash of the password. Verification is against
+`sasldb2`; `userPassword` is never read.
 
 Problems:
 
@@ -376,7 +421,7 @@ challenge; the client hashes the password with it and sends the response.
 For the server to verify the response it must be able to reproduce the
 expected hash, which requires knowing the original plaintext password.
 
-LDAP stores passwords hashed (SSHA, bcrypt, etc). Hashes are one-way —
+LDAP stores passwords hashed (SSHA, bcrypt, etc). Hashes are one-way:
 the server cannot reverse them. So DIGEST-MD5 cannot use LDAP's
 `userPassword`.
 
@@ -469,7 +514,7 @@ weak mechanism, under any circumstances.
 ### EXTERNAL alone
 
 No password fallback. Anyone without a client cert is locked out.
-Operationally fragile — a single cert expiry or loss locks the account.
+Operationally fragile: a single cert expiry or loss locks the account.
 Acceptable only in tightly controlled environments with robust cert
 lifecycle management.
 
@@ -482,7 +527,7 @@ No package beyond `libsasl2-2` (installed with `slapd`). No
 PLAIN binds:
 
 ```
-# /etc/sasl2/slapd.conf
+# slapd.conf
 security simple_bind=256
 ```
 
@@ -509,7 +554,9 @@ plus `noanonymous` in `sasl-secprops`.
 
 Included in `libsasl2-modules`:
 
+```
     apt install libsasl2-modules
+```
 
 Set allowed mechanisms in `/etc/sasl2/slapd.conf`:
 
@@ -650,7 +697,9 @@ mech_list: OTP
 
 Initialize credentials:
 
+```
     saslpasswd2 -c -u marsel.is username
+```
 
 ## slapd.conf: sasl-secprops
 
@@ -658,6 +707,8 @@ sasl-secprops controls which mechanisms slapd will offer and minimum
 security requirements. Format: comma-separated list of properties.
 
 Properties:
+
+```
   noanonymous     do not allow anonymous (no-credential) SASL binds
   noplaintext     do not allow plaintext (PLAIN/LOGIN) mechanisms
   noactive        do not allow mechanisms vulnerable to active attacks
@@ -668,9 +719,11 @@ Properties:
                   (0=none, 256=AES-256)
   maxssf=N        maximum SSF the SASL layer may provide
   maxbufsize=N    maximum SASL buffer size (default 65536)
+```
 
 For our setup (SCRAM-SHA-256/512, GSSAPI, no plaintext, no broken
 mechanisms):
+
 ```
     sasl-secprops noanonymous,noplaintext,noactive,nodictionary,minssf=0
 ```
@@ -702,3 +755,4 @@ advertise at most two mechanisms and reject everything else at the
 configuration level, not leave it up to the client to "pick the strongest
 it supports" while quietly also offering DIGEST-MD5 because nobody
 cleaned up the config file.
+
