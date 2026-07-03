@@ -141,6 +141,8 @@ is as follows, sans GSSAPI:
 mechanism name. Different naming applied to the same concept and yes,
 it is confusing.
 
+We will go through the details of each algorithm below.
+
 ### Examples of values
 
 `{CLEARTEXT}secret`
@@ -173,19 +175,17 @@ LDAP directly.
 Never advertise PLAIN without `security simple_bind=256` in `slapd.conf`.
 
 ## How SCRAM-SHA-* Works
-So, 
-When using the algorithms, we do not store the  plaintext password in
-the `userPassword` attribut. Instead we use the SCRAM verifier: a salted,
+
+When using the algorithms, we do not store the plaintext password in
+the `userPassword` attribute. Instead we use the SCRAM verifier: a salted,
 iterated hash derived from the password. The format is as follows:
 
     {scheme}iter,salt,StoredKey,ServerKey
 
-
 SCRAM (Salted Challenge Response Authentication Mechanism, RFC 5802) is a
 mutual challenge-response authentication protocol. The password is never
-sent over the wire in any form.
-The server can verify a correct password against this without ever knowing
-the plaintext.
+sent over the wire in any form. The server can verify a correct password
+against this without ever knowing the plaintext.
 
 ### The exchange
 
@@ -445,23 +445,181 @@ Operationally fragile — a single cert expiry or loss locks the account.
 Acceptable only in tightly controlled environments with robust cert
 lifecycle management.
 
+## Installing and Configuring SASL Mechanisms on Debian Trixie
+
+### PLAIN
+
+No package beyond `libsasl2-2` (installed with `slapd`). No
+`/etc/sasl2/slapd.conf` entry needed. Enforce TLS before allowing
+PLAIN binds:
+
+```
+# slapd.conf
+security simple_bind=256
+```
+
+### LOGIN
+
+Do not use. If it appears in the mechanism list, suppress it:
+
+```
+# /etc/sasl2/slapd.conf
+mech_list: SCRAM-SHA-512 SCRAM-SHA-256
+```
+
+**Not recommended.**
+
+### SCRAM-SHA-1, SCRAM-SHA-256, SCRAM-SHA-512
+
+Included in `libsasl2-modules`:
+
+    apt install libsasl2-modules
+
+Set allowed mechanisms in `/etc/sasl2/slapd.conf`:
+
+```
+mech_list: SCRAM-SHA-512 SCRAM-SHA-256
+```
+
+Set the password hash schemes in `slapd.conf`:
+
+```
+password-hash {SCRAM-SHA-512} {SCRAM-SHA-256}
+```
+
+Set user passwords with `ldappasswd`; `slapd` stores SCRAM verifiers
+in `userPassword` automatically.
+
+### GSSAPI
+
+Install the MIT or Heimdal module (pick one):
+
+    apt install libsasl2-modules-gssapi-mit
+    apt install libsasl2-modules-gssapi-heimdal
+
+Create a service principal and export a keytab:
+
+    kadmin -p admin/admin
+    kadmin: addprinc -randkey ldap/ldap.marsel.is@MARSEL.IS
+    kadmin: ktadd -k /etc/ldap/ldap.keytab ldap/ldap.marsel.is@MARSEL.IS
+
+Set ownership and permissions:
+
+    chown openldap:openldap /etc/ldap/ldap.keytab
+    chmod 600 /etc/ldap/ldap.keytab
+
+Point `slapd` at the keytab via a systemd override or
+`/etc/default/slapd`:
+
+    export KRB5_KTNAME=/etc/ldap/ldap.keytab
+
+Add to `/etc/sasl2/slapd.conf`:
+
+```
+mech_list: GSSAPI
+```
+
+Remove `userPassword` from all user entries once all users are
+enrolled in Kerberos.
+
+### EXTERNAL
+
+No package installation required. No `/etc/sasl2/slapd.conf` entry
+required. Enabled automatically when the client presents a TLS client
+certificate.
+
+Ensure `slapd.conf` has:
+
+```
+TLSVerifyClient demand
+TLSCACertificateFile /etc/ssl/certs/ca-certificates.crt
+```
+
+Map the certificate subject DN to a LDAP DN with `authz-regexp`:
+
+```
+authz-regexp "^cn=([^,]+),.*$"
+             "uid=$1,ou=people,dc=marsel,dc=is"
+```
+
+### DIGEST-MD5
+
+**Not recommended.** Documented here for completeness only.
+
+    apt install libsasl2-modules sasl2-bin
+
+```
+# /etc/sasl2/slapd.conf
+pwcheck_method: auxprop
+auxprop_plugin: sasldb
+mech_list: DIGEST-MD5
+```
+
+Add users to `sasldb2`:
+
+    saslpasswd2 -c -u marsel.is username
+
+**Do not deploy.**
+
+### CRAM-MD5
+
+**Not recommended.** Same `sasldb2` requirement as DIGEST-MD5.
+
+    apt install libsasl2-modules sasl2-bin
+
+```
+# /etc/sasl2/slapd.conf
+pwcheck_method: auxprop
+auxprop_plugin: sasldb
+mech_list: CRAM-MD5
+```
+
+**Do not deploy.**
+
+### NTLM
+
+**Not recommended.** Included in `libsasl2-modules`. No additional
+package needed. Add `NTLM` to `mech_list` in `/etc/sasl2/slapd.conf`.
+
+**Do not deploy.**
+
+### OTP
+
+Practically undeployed. Documented here for completeness only.
+
+    apt install libsasl2-modules-otp sasl2-bin
+
+```
+# /etc/sasl2/slapd.conf
+pwcheck_method: auxprop
+auxprop_plugin: sasldb
+mech_list: OTP
+```
+
+Initialize credentials:
+
+    saslpasswd2 -c -u marsel.is username
+
 ## slapd.conf: sasl-secprops
 
 ```
-# sasl-secprops controls which mechanisms slapd will offer and minimum security requirements.
-# Format: comma-separated list of properties.
+# sasl-secprops controls which mechanisms slapd will offer and minimum
+# security requirements. Format: comma-separated list of properties.
 #
 # Properties:
-#   noanonymous        do not allow anonymous (no-credential) SASL binds
-#   noplaintext        do not allow plaintext (PLAIN/LOGIN) mechanisms
-#   noactive           do not allow mechanisms vulnerable to active attacks (DIGEST-MD5, CRAM-MD5)
-#   nodictionary       do not allow mechanisms vulnerable to dictionary attacks
-#   forward_secrecy    require forward secrecy (mechanisms that provide PFS)
-#   minssf=N           minimum SSF the SASL layer must provide (0=none, 256=AES-256)
-#   maxssf=N           maximum SSF the SASL layer may provide
-#   maxbufsize=N       maximum SASL buffer size (default 65536)
+#   noanonymous     do not allow anonymous (no-credential) SASL binds
+#   noplaintext     do not allow plaintext (PLAIN/LOGIN) mechanisms
+#   noactive        do not allow mechanisms vulnerable to active attacks
+#                   (DIGEST-MD5, CRAM-MD5)
+#   nodictionary    do not allow mechanisms vulnerable to dictionary attacks
+#   forward_secrecy require forward secrecy (mechanisms that provide PFS)
+#   minssf=N        minimum SSF the SASL layer must provide
+#                   (0=none, 256=AES-256)
+#   maxssf=N        maximum SSF the SASL layer may provide
+#   maxbufsize=N    maximum SASL buffer size (default 65536)
 #
-# For our setup (SCRAM-SHA-256/512, GSSAPI, no plaintext, no broken mechanisms):
+# For our setup (SCRAM-SHA-256/512, GSSAPI, no plaintext, no broken
+# mechanisms):
 sasl-secprops noanonymous,noplaintext,noactive,nodictionary,minssf=0
 #
 # minssf=0 because the security directive in slapd.conf already enforces
@@ -469,9 +627,8 @@ sasl-secprops noanonymous,noplaintext,noactive,nodictionary,minssf=0
 # the SASL layer to re-enforce the same requirement, though it is not
 # unheard of.
 #
-# To restrict which mechanisms are offered, use mech_list in /etc/sasl2/slapd.conf:
-# (not a slapd.conf directive -- controlled via the Cyrus SASL config file)
-# authz-regexp uses POSIX extended regex (ERE, same as grep -E, via POSIX regex.h).
+# To restrict which mechanisms are offered, use mech_list in
+# /etc/sasl2/slapd.conf (not a slapd.conf directive):
 #
 # /etc/sasl2/slapd.conf:
 #   mech_list: SCRAM-SHA-512 SCRAM-SHA-256 GSSAPI
