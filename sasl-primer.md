@@ -118,7 +118,7 @@ it supports and the authentication proceeds using only that mechanism. It
 does not mean they all are used together in sequence and all together must
 pass to authenticate (ORed rather than ANDed).
 
-## What Is Stored in The LDAP `userPassword` Attribute
+## What Is Stored in The LDAP `userPassword` Attribute *a.k.a the 'password storage scheme'*
 
 The generic form of the values `userPassword` stores is
 
@@ -127,7 +127,9 @@ The generic form of the values `userPassword` stores is
 ```
 
 `{SCHEME}` can take on the following values: `{CRYPT}`, `{MD5}`, `{SMD5}`, `{SHA}`,
-`{SSHA}`, `{CLEARTEXT}`, `{SCRAM-SHA-1}`, `{SCRAM-SHA-256}`, `{SCRAM-SHA-512}`.
+`{SSHA}`, `{SASL}`, `{CLEARTEXT}`, `{SCRAM-SHA-1}`, `{SCRAM-SHA-256}` and
+`{SCRAM-SHA-512}` 
+
 There is no {GSSAPI} because the `userPassword` attribute is removed from
 the DIT when LDAP is configured with GSSAPI support.
 
@@ -142,6 +144,7 @@ is as follows:
 | `{SMD5}`          | `{SMD5}base64(md5(password+salt)+salt)`                                 |
 | `{SHA}`           | `{SHA}base64(sha1(password))`                                           |
 | `{SSHA}`          | `{SSHA}base64(sha1(password+salt)+salt)`                                |
+| `{SASL}`          | `{SASL}username@realm.example                                           |
 | `{SCRAM-SHA-1}`   | `{SCRAM-SHA-1}iter,base64(salt),StoredKey,ServerKey`                    |
 | `{SCRAM-SHA-256}` | `{SCRAM-SHA-256}iter,base64(salt),StoredKey,ServerKey`                  |
 | `{SCRAM-SHA-512}` | `{SCRAM-SHA-512}iter,base64(salt),StoredKey,ServerKey`                  |
@@ -149,6 +152,13 @@ is as follows:
 {CLEARTEXT} is the `userPassword` storage scheme. PLAIN is the SASL
 mechanism name. Different naming applied to the same concept and yes,
 it is confusing.
+
+{SASL}username@realm.example does not store a password at all. It is
+a pointer: when `slapd` sees it, it forwards the password check to
+`saslauthd`, passing username@realm.example as the identity.
+`saslauthd` then verifies against whatever backend it is configured
+to use (PAM, Kerberos, LDAP). So, in this case, the `userPassword`
+attribute holds only the delegation target, not a credential.
 
 We will go through the details of each mechanism below.
 
@@ -160,6 +170,7 @@ We will go through the details of each mechanism below.
 `{SMD5}F4SBhNJUOBJfE0HLWkCkFQ==salt`
 `{SHA}W6ph5Mm5Pz8GgiULbPgzG37mj9g=`
 `{SSHA}W6ph5Mm5Pz8GgiULbPgzG37mj9gsalt`
+`{SASL}username@realm.example`
 `{SCRAM-SHA-256}4096,c2FsdA==,StoredKey,ServerKey`
 `{SCRAM-SHA-512}4096,c2FsdA==,StoredKey,ServerKey`
 `{SCRAM-SHA-1}4096,c2FsdA==,StoredKey,ServerKey`
