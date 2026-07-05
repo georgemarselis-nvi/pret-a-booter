@@ -169,16 +169,16 @@ We will go through the details of each mechanism below.
 Not every mechanism reads `userPassword`. This is the single most
 confusing part of SASL with OpenLDAP, so here it is spelled out:
 
-| Mechanism            | Verifies against                                                  |
-|:---------------------|:------------------------------------------------------------------|
-| PLAIN                | `userPassword` in LDAP, all values, any `{SCHEME}`                |
+| Mechanism            | Verifies against                                            |
+|:---------------------|:------------------------------------------------------------|
+| PLAIN                | `userPassword` in LDAP, all values, any `{SCHEME}`          |
 | SCRAM-SHA-1/256/512  | `userPassword` in LDAP, only the exact matching `{SCRAM-*}` value |
-| GSSAPI               | Kerberos keytab; `userPassword` ignored                           |
-| EXTERNAL             | TLS client cert; `userPassword` ignored                           |
-| DIGEST-MD5           | `sasldb2` only; `userPassword` ignored                            |
-| CRAM-MD5             | `sasldb2` only; `userPassword` ignored                            |
-| OTP                  | `sasldb2` only; `userPassword` ignored                            |
-| NTLM                 | `sasldb2` only; `userPassword` ignored                            |
+| GSSAPI               | Kerberos keytab; `userPassword` ignored                     |
+| EXTERNAL             | TLS client cert; `userPassword` ignored                     |
+| DIGEST-MD5           | `sasldb2` only; `userPassword` ignored                      |
+| CRAM-MD5             | `sasldb2` only; `userPassword` ignored                      |
+| OTP                  | `sasldb2` only; `userPassword` ignored                      |
+| NTLM                 | `sasldb2` only; `userPassword` ignored                      |
 
 The consequence: if a client authenticates with DIGEST-MD5 and the user
 only has a `{CLEARTEXT}` value in `userPassword`, authentication fails.
@@ -210,7 +210,11 @@ then verifies the supplied password against all existing `userPassword`
 values, regardless of what their `{SCHEME}` is: for each value, it
 hashes the supplied password with that value's scheme and compares.
 First match wins. If you are screaming in your head "THIS IS STUPID",
-you are right: the weakest stored value is the attack surface.
+you are right: the weakest stored value is the attack surface. It gets
+worse: this applies even when multiple values use the same scheme. Two
+`{SSHA}` values with different passwords? `slapd` will accept either one
+and will not warn you. Password drift is silent, undetected and permanent
+until someone manually audits the attribute.
 
 In contrast, the SMTP and IMAP daemons hand the password to SASL, which
 verifies via `auxprop` (a SASL plugin that reads a local password
@@ -755,4 +759,3 @@ advertise at most two mechanisms and reject everything else at the
 configuration level, not leave it up to the client to "pick the strongest
 it supports" while quietly also offering DIGEST-MD5 because nobody
 cleaned up the config file.
-
