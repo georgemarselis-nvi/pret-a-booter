@@ -90,6 +90,85 @@ criticism, people at the time honestly thought it was an elegant
 solution. History now has shown otherwise and a lot of protocols are
 going back to having one less dependency.
 
+## Password Storage Schemes in the LDAP `userPassword` Attribute
+
+Before talking about authentication mechanisms, we need to talk about
+how passwords are stored in LDAP. The two are separate systems that
+interact, and confusing them is the single most common source of
+mistakes when configuring SASL with OpenLDAP.
+
+The `userPassword` attribute stores a password value in the form:
+
+```
+    {SCHEME}encoded-credential
+```
+
+`{SCHEME}` determines how the credential is encoded. The available
+schemes are:
+
+| Scheme            | Format                                               | Notes                                              |
+|:------------------|:-----------------------------------------------------|:---------------------------------------------------|
+| `{CLEARTEXT}`     | `{CLEARTEXT}secret`                                  | Plaintext; never use                               |
+| `{CRYPT}`         | `{CRYPT}$6$salt$hash`                                | Delegates to system crypt(3)                       |
+| `{MD5}`           | `{MD5}base64(md5(password))`                         | Unsalted; do not use                               |
+| `{SMD5}`          | `{SMD5}base64(md5(password+salt)+salt)`              | Salted MD5; weak; do not use                       |
+| `{SHA}`           | `{SHA}base64(sha1(password))`                        | Unsalted SHA-1; do not use                         |
+| `{SSHA}`          | `{SSHA}base64(sha1(password+salt)+salt)`             | Salted SHA-1; traditional default; acceptable      |
+| `{SASL}`          | `{SASL}username@realm.example`                       | Not a hash; delegates check to saslauthd           |
+| `{SCRAM-SHA-1}`   | `{SCRAM-SHA-1}iter,base64(salt),StoredKey,ServerKey` | SCRAM verifier; acceptable minimum                 |
+| `{SCRAM-SHA-256}` | `{SCRAM-SHA-256}iter,base64(salt),StoredKey,ServerKey` | SCRAM verifier; current standard                 |
+| `{SCRAM-SHA-512}` | `{SCRAM-SHA-512}iter,base64(salt),StoredKey,ServerKey` | SCRAM verifier; strongest available              |
+
+There is no `{GSSAPI}` because `userPassword` is removed from the DIT
+entirely when LDAP is configured with GSSAPI support.
+
+### {CLEARTEXT} vs PLAIN
+
+`{CLEARTEXT}` is the `userPassword` storage scheme name. PLAIN is the
+SASL mechanism name. Different naming applied to the same concept. Yes,
+it is confusing.
+
+### {SASL}: delegation, not storage
+
+`{SASL}username@realm.example` does not store a password at all. It is a
+pointer: when `slapd` sees it, it forwards the password check to
+`saslauthd`, passing `username@realm.example` as the identity.
+`saslauthd` then verifies against whatever backend it is configured to
+use (PAM, Kerberos, LDAP). This is not the same as using SASL to
+authenticate the LDAP session.
+
+### userPassword is multi-valued
+
+The `userPassword` attribute can exist more than once within `person`
+or `posixAccount`. This means a user can have multiple values
+simultaneously:
+
+    userPassword: {SCRAM-SHA-256}iter,salt,StoredKey,ServerKey
+    userPassword: {SCRAM-SHA-512}iter,salt,StoredKey,ServerKey
+    userPassword: {SSHA}W6ph5Mm5Pz8GgiULbPgzG37mj9gsalt
+
+`slapd` iterates through all values until it finds one that matches or
+runs out. This is by design for PLAIN, which needs to support multiple
+schemes. It is a disaster for everything else: two `{SSHA}` values with
+different passwords means `slapd` will accept either one with no warning.
+Password drift is silent, undetected and permanent until someone manually
+audits the attribute.
+
+### Examples of values
+
+```
+{CLEARTEXT}secret
+{CRYPT}$6$salt$hash
+{MD5}rL0Y20zC+Fzt72VPzMSk2A==
+{SMD5}F4SBhNJUOBJfE0HLWkCkFQ==salt
+{SHA}W6ph5Mm5Pz8GgiULbPgzG37mj9g=
+{SSHA}W6ph5Mm5Pz8GgiULbPgzG37mj9gsalt
+{SASL}george@realm.example
+{SCRAM-SHA-256}4096,c2FsdA==,StoredKey,ServerKey
+{SCRAM-SHA-512}4096,c2FsdA==,StoredKey,ServerKey
+{SCRAM-SHA-1}4096,c2FsdA==,StoredKey,ServerKey
+```
+
 ## All SASL Mechanisms
 
 Alright, let us take a look at the list of all the available mechanisms as per July 2026:
@@ -118,78 +197,21 @@ it supports and the authentication proceeds using only that mechanism. It
 does not mean they all are used together in sequence and all together must
 pass to authenticate (ORed rather than ANDed).
 
-## What Is Stored in The LDAP `userPassword` Attribute *a.k.a the 'password storage scheme'*
-
-The generic form of the values `userPassword` stores is
-
-```
-    {SCHEME}encoded-credential
-```
-
-`{SCHEME}` can take on the following values: `{CRYPT}`, `{MD5}`, `{SMD5}`, `{SHA}`,
-`{SSHA}`, `{SASL}`, `{CLEARTEXT}`, `{SCRAM-SHA-1}`, `{SCRAM-SHA-256}` and
-`{SCRAM-SHA-512}` 
-
-There is no {GSSAPI} because the `userPassword` attribute is removed from
-the DIT when LDAP is configured with GSSAPI support.
-
-As for the encoded-credential part, the canonical format for each algorithm
-is as follows:
-
-| Scheme            | Format                                                                  |
-|:------------------|:------------------------------------------------------------------------|
-| `{CLEARTEXT}`     | `{CLEARTEXT}secret`                                                     |
-| `{CRYPT}`         | `{CRYPT}$6$salt$hash`                                                   |
-| `{MD5}`           | `{MD5}base64(md5(password))`                                            |
-| `{SMD5}`          | `{SMD5}base64(md5(password+salt)+salt)`                                 |
-| `{SHA}`           | `{SHA}base64(sha1(password))`                                           |
-| `{SSHA}`          | `{SSHA}base64(sha1(password+salt)+salt)`                                |
-| `{SASL}`          | `{SASL}username@realm.example                                           |
-| `{SCRAM-SHA-1}`   | `{SCRAM-SHA-1}iter,base64(salt),StoredKey,ServerKey`                    |
-| `{SCRAM-SHA-256}` | `{SCRAM-SHA-256}iter,base64(salt),StoredKey,ServerKey`                  |
-| `{SCRAM-SHA-512}` | `{SCRAM-SHA-512}iter,base64(salt),StoredKey,ServerKey`                  |
-
-{CLEARTEXT} is the `userPassword` storage scheme. PLAIN is the SASL
-mechanism name. Different naming applied to the same concept and yes,
-it is confusing.
-
-{SASL}username@realm.example does not store a password at all. It is
-a pointer: when `slapd` sees it, it forwards the password check to
-`saslauthd`, passing username@realm.example as the identity.
-`saslauthd` then verifies against whatever backend it is configured
-to use (PAM, Kerberos, LDAP). So, in this case, the `userPassword`
-attribute holds only the delegation target, not a credential.
-
-We will go through the details of each mechanism below.
-
-### Examples of values
-
-`{CLEARTEXT}secret`
-`{CRYPT}$6$salt$hash`
-`{MD5}rL0Y20zC+Fzt72VPzMSk2A==`
-`{SMD5}F4SBhNJUOBJfE0HLWkCkFQ==salt`
-`{SHA}W6ph5Mm5Pz8GgiULbPgzG37mj9g=`
-`{SSHA}W6ph5Mm5Pz8GgiULbPgzG37mj9gsalt`
-`{SASL}username@realm.example`
-`{SCRAM-SHA-256}4096,c2FsdA==,StoredKey,ServerKey`
-`{SCRAM-SHA-512}4096,c2FsdA==,StoredKey,ServerKey`
-`{SCRAM-SHA-1}4096,c2FsdA==,StoredKey,ServerKey`
-
 ## Which Mechanism Reads What
 
 Not every mechanism reads `userPassword`. This is the single most
 confusing part of SASL with OpenLDAP, so here it is spelled out:
 
-| Mechanism            | Verifies against                                            |
-|:---------------------|:------------------------------------------------------------|
-| PLAIN                | `userPassword` in LDAP, all values, any `{SCHEME}`          |
-| SCRAM-SHA-1/256/512  | `userPassword` in LDAP, only the exact matching `{SCRAM-*}` value |
-| GSSAPI               | Kerberos keytab; `userPassword` ignored                     |
-| EXTERNAL             | TLS client cert; `userPassword` ignored                     |
-| DIGEST-MD5           | `sasldb2` only; `userPassword` ignored                      |
-| CRAM-MD5             | `sasldb2` only; `userPassword` ignored                      |
-| OTP                  | `sasldb2` only; `userPassword` ignored                      |
-| NTLM                 | `sasldb2` only; `userPassword` ignored                      |
+| Mechanism            | Verifies against                                                   |
+|:---------------------|:-------------------------------------------------------------------|
+| PLAIN                | `userPassword` in LDAP, all values, any `{SCHEME}`                 |
+| SCRAM-SHA-1/256/512  | `userPassword` in LDAP, only the exact matching `{SCRAM-*}` value  |
+| GSSAPI               | Kerberos keytab; `userPassword` ignored                            |
+| EXTERNAL             | TLS client cert; `userPassword` ignored                            |
+| DIGEST-MD5           | `sasldb2` only; `userPassword` ignored                             |
+| CRAM-MD5             | `sasldb2` only; `userPassword` ignored                             |
+| OTP                  | `sasldb2` only; `userPassword` ignored                             |
+| NTLM                 | `sasldb2` only; `userPassword` ignored                             |
 
 The consequence: if a client authenticates with DIGEST-MD5 and the user
 only has a `{CLEARTEXT}` value in `userPassword`, authentication fails.
@@ -214,18 +236,15 @@ the transport layer before the bind is attempted. The password is
 cleartext at the SASL layer but encrypted by TLS on the wire. But, without
 TLS, PLAIN is trivially interceptable.
 
-Remember that the `userPassword` attribute can exist more than once
-within `person` or `posixAccount`. When a client uses the PLAIN
-mechanism, it sends the password to `slapd`, bypassing SASL. `slapd`
-then verifies the supplied password against all existing `userPassword`
-values, regardless of what their `{SCHEME}` is: for each value, it
-hashes the supplied password with that value's scheme and compares.
-First match wins. If you are screaming in your head "THIS IS STUPID",
-you are right: the weakest stored value is the attack surface. It gets
-worse: this applies even when multiple values use the same scheme. Two
-`{SSHA}` values with different passwords? `slapd` will accept either one
-and will not warn you. Password drift is silent, undetected and permanent
-until someone manually audits the attribute.
+When a client uses the PLAIN mechanism, it sends the password to `slapd`,
+bypassing SASL. `slapd` then verifies the supplied password against all
+existing `userPassword` values, regardless of what their `{SCHEME}` is:
+for each value, it hashes the supplied password with that value's scheme
+and compares. First match wins. The weakest stored value is the attack
+surface. It gets worse: this applies even when multiple values use the
+same scheme. Two `{SSHA}` values with different passwords? `slapd` will
+accept either one and will not warn you. Password drift is silent,
+undetected and permanent until someone manually audits the attribute.
 
 In contrast, the SMTP and IMAP daemons hand the password to SASL, which
 verifies via `auxprop` (a SASL plugin that reads a local password
