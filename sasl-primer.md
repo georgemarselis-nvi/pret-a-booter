@@ -17,6 +17,22 @@ Public License for more details.
 You should have received a copy of the GNU General Public License along
 with this program. If not, see <https://www.gnu.org/licenses/>.
 
+## Table of Contents
+
+1. [Why does this file exist?](#why-does-this-file-exist)
+2. [What is SASL?](#what-is-sasl)
+3. [Why Create a Protocol That Handles Negotiation at All?](#why-create-a-protocol-that-handles-negotiation-at-all)
+4. [Password Storage Schemes in the LDAP userPassword Attribute](#password-storage-schemes-in-the-ldap-userpassword-attribute)
+5. [All SASL Mechanisms](#all-sasl-mechanisms)
+6. [How Mechanism Lists Work](#how-mechanism-lists-work)
+7. [Which Mechanism Reads What](#which-mechanism-reads-what)
+8. [Explaining Each of The Mechanisms](#explaining-each-of-the-mechanisms)
+9. [Combos That Make Sense](#combos-that-make-sense)
+10. [Combos That Make Less Sense](#combos-that-make-less-sense)
+11. [Installing and Configuring SASL Mechanisms on Debian Trixie](#installing-and-configuring-sasl-mechanisms-on-debian-trixie)
+12. [slapd.conf: sasl-secprops](#slapdconf-sasl-secprops)
+13. [It Is 2026: Why Are We Still Negotiating?](#it-is-2026-why-are-we-still-negotiating)
+
 ## Why does this file exist?
 
 I needed to explain the basics of SASL to myself without going through the
