@@ -113,6 +113,13 @@ time honestly thought it was an elegant solution. History now has shown
 otherwise and a lot of protocols are going back to having one less
 dependency.
 
+For completeness sake: these are all the authentication schemes invented
+so far: Username/password, certificates (X.509), one-time passwords
+(OTP/TOTP), hardware tokens (smart cards, YubiKey), biometrics, Kerberos
+tickets, OAuth2/OIDC tokens, SAML assertions, SSH keys, API keys and
+magic links that come to you via email, are valid for very short times
+and are single-use only.
+
 ## Password Storage Schemes in the LDAP `userPassword` Attribute
 
 Before talking about authentication mechanisms, we need to talk about
