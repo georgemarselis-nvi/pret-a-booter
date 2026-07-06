@@ -195,7 +195,7 @@ different passwords means `slapd` will accept either one with no warning.
 Password drift is silent, undetected and permanent until someone manually
 audits the attribute.
 
-### Examples of values
+### Examples of stored password values
 
 ```
 {CLEARTEXT}secret
@@ -210,7 +210,7 @@ audits the attribute.
 {SCRAM-SHA-1}4096,c2FsdA==,StoredKey,ServerKey
 ```
 
-## All SASL Mechanisms
+## All SASL authorizaiton Mechanisms
 
 Alright, let us take a look at the list of all the available mechanisms as per July 2026:
 
@@ -228,6 +228,40 @@ Alright, let us take a look at the list of all the available mechanisms as per J
 | EXTERNAL      | RFC 4422   | Strong          | Uses TLS client cert as identity; no password; requires PKI                                                            |
 | OTP           | RFC 2444   | Undeployed      | S/KEY based one-time passwords; practically nobody uses this; TOTP is not the same thing                               |
 | NTLM          | -          | Avoid           | Microsoft proprietary; pass-the-hash vulnerable; relay attack vulnerable; deprecated by Microsoft in favor of Kerberos |
+
+
+### Examples of on-the-wire tokens by mechanism
+
+**PLAIN**
+`\0george\0secretpassword`
+
+**SCRAM-SHA-256 client-first**
+`n,,n=george,r=fyko+d2lbbFgONRv9qkxdawL`
+
+**SCRAM-SHA-256 server-first**
+`r=fyko+d2lbbFgONRv9qkxdawL3rfcNHYJY1ZVvWVs7j,s=QSXCR+Q6sek8bf92,i=4096`
+
+**SCRAM-SHA-256 client-final**
+`c=biws,r=fyko+d2lbbFgONRv9qkxdawL3rfcNHYJY1ZVvWVs7j,p=dHzbZapWIk4jUhN+Ute9ytag9zjfMHgsqmmiz9AndVQ=`
+
+**GSSAPI**
+Binary Kerberos AP-REQ token; not human-readable.
+
+**EXTERNAL**
+No token. TLS client cert presented during the handshake is the credential.
+
+**DIGEST-MD5**
+`username="george",realm="marsel.is",nonce="OA6MG9tEQGm2hh",cnonce="OA6MHXh6VqTrRk",nc=00000001,qop=auth,digest-uri="ldap/ldap.marsel.is",response=d388dad90d4bbd760a152321f2143af7`
+
+**CRAM-MD5**
+`george 6f0f5f57a7f6e56161c7fbdff47e1d5a`
+
+**OTP**
+`otp-md5 499 gr7654 PULP FARE HUMP LUCK TOES KNOB`
+
+**NTLM**
+Binary NTLMSSP blob; not human-readable.
+
 
 ## How Mechanism Lists Work
 
