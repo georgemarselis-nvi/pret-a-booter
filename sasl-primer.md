@@ -68,15 +68,24 @@ negotiation mechanisms slide out and bury you.
 
 The other problem, at least with regards to LDAP, is that the
 authentication mechanisms share names with the password storage schemes.
-PLAIN is both a SASL mechanism and the concept behind {CLEARTEXT}.
-DIGEST-MD5 is both a SASL mechanism and implies an MD5-based storage
+PLAIN is both a SASL mechanism and the concept behind `{CLEARTEXT}`.
+`DIGEST-MD5` is both a SASL mechanism and implies an MD5-based storage
 scheme but they are completely separate systems that do not talk to each
 other. Picking the wrong one, or assuming they are related, will waste
 your afternoon.
 
 On top of that, OpenLDAP is not consistent about what authentication
-mechanisms handles itself. PLAIN and SCRAM are processed natively by
-`slapd`. DIGEST-MD5, CRAM-MD5, NTLM and OTP are thrown at Cyrus SASL with no logic behind the split beyond historical accident.
+mechanisms it handles itself. PLAIN and SCRAM are processed natively
+by `slapd`. `DIGEST-MD5`, `CRAM-MD5`, `NTLM` and `OTP` are thrown at
+Cyrus SASL with no logic behind the split beyond historical accident:
+The split exists because PLAIN and SCRAM verify against the LDAP
+`userPassword` directly, which `slapd` already has access to.
+`DIGEST-MD5`, `CRAM-MD5`, `NTLM` and `OTP` need plaintext passwords
+at the time of verification which LDAP cannot provide because it stores
+hashes. So those mechanisms were handed to Cyrus SASL and sasldb2
+instead. Saying "It was the path of least resistance, not a design
+decision" make sense now but it does not help when downing ibuprofen
+like candy.
 
 These things create a maximum confusion for someone who is expecting to
 walk in, read a document, configure ten parameters and go about their
@@ -95,8 +104,8 @@ LDAP and anything else that speaks SASL. The protocol says "authenticate
 me" and SASL handles the rest.
 
 So, the framework is sound, in theory. But on top of being designed by
-a comitee, the mechanisms it accumulated over thirty years are a problem.
-The 1990s were still Wild-Wild West territory on the Internet.
+a commitee, the mechanisms it accumulated over thirty years are a
+problem. The 1990s were still Wild-Wild West territory on the Internet.
 Essentially, it was the equivalent of building the railroad network.
 Authentication wise, people threw shit on the wall and saw what stuck. 
 And while I can now look back and make easy criticism, people at the
