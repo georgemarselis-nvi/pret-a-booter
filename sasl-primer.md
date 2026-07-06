@@ -123,11 +123,22 @@ and are single-use only.
 ## Password Storage Schemes in the LDAP `userPassword` Attribute
 
 Before talking about authentication mechanisms, we need to talk about
-how passwords are stored in LDAP. The two are separate systems that
-interact, and confusing them is the single most common source of
-mistakes when configuring SASL with OpenLDAP.
+how passwords are stored in LDAP (aka the `'password storing mechanisms'`,
+as referred to in the OpenLDAP literature. It will be easier to talk about
+the rest of the protocol once we get this part out of the way. The two
+are separate systems that interact and confusing them is the
+single most common source of mistakes when configuring SASL with OpenLDAP.
 
-The `userPassword` attribute stores a password value in the form:
+Also, let us make a clear distinction: 
+
+- LDAP: the protocol defined in [RFC 4511](https://www.rfc-editor.org/rfc/rfc4511)
+- OpenLDAP: The reference software implementing LDAP
+- SASL
+
+Most of the times the meaning of LDAP an OpenLDAP is interchangable. I
+will point out when it is not.
+
+In LDAP, the `userPassword` attribute stores a password value in the form:
 
 ```
     {SCHEME}encoded-credential
