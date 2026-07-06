@@ -49,8 +49,9 @@ broken login system, SASL provides a plug-in interface: the protocol says
 "we need to authenticate" and SASL handles the how.
 
 The way it works: the server publishes a list of mechanisms it accepts.
-The client picks one. They do the exchange that mechanism requires. If
-successful, the protocol gets a "we are good to go" answer and continues.
+The client picks one. They perform the exchange that mechanism requires.
+If successful, the protocol gets a "we are good to go" answer and
+continues.
 
 The "Simple" in the name is earned: the framework itself is simple. The
 problem is the mechanisms it accumulated over thirty years. Some are
@@ -65,25 +66,21 @@ fire*" (NTLM). SASL looks simple from the outside: one connection, one
 port, one protocol. Then you open the door and thirty years of
 negotiation mechanisms slide out and bury you.
 
-The other catch is SASL is only as good as the mechanism you pick. For
-example, picking DIGEST-MD5: it was the mandatory LDAPv3 mechanism in
-the 2000s and using it meant you had to store cleartext passwords in a
-separate from-the-system database, which there was no way to automatically
-keep in sync with the system one. And the glue for the functionality
-was not provided. So, you had two password databases and everybody
-had to make their own glue. So, it sucked. On the other hand, picking
-SCRAM-SHA-256 meant doing it correctly, because no passwords or hashes
-were ever exchanged. But picking SCRAM-SHA-256 meant that you had to
-invest in a time machine because it did not exist in the 1990s (RFC
-5802, 2010). And then there was GSSAPI: Picking it meant not storing
-passwords in LDAP at all, which is the most correct answer of them
-all, but picking GSSAPI meant reading the source code for the MIT
-Kerberos to understand what is going on, before implementing GSSAPI
-for your site.
+The other problem, at least with regards to LDAP, is that the
+authentication mechanisms share names with the password storage schemes.
+PLAIN is both a SASL mechanism and the concept behind {CLEARTEXT}.
+DIGEST-MD5 is both a SASL mechanism and implies an MD5-based storage
+scheme but they are completely separate systems that do not talk to each
+other. Picking the wrong one, or assuming they are related, will waste
+your afternoon.
 
-Furthermore, SASL does not encrypt the connection by default. In
-practice, TLS handles the encryption layer after authentication. SASL
-negotiates who you are. Everything else is the problem of TLS.
+On top of that, OpenLDAP is not consistent about what authentication
+mechanisms handles itself. PLAIN and SCRAM are processed natively by
+`slapd`. DIGEST-MD5, CRAM-MD5, NTLM and OTP are thrown at Cyrus SASL with no logic behind the split beyond historical accident.
+
+These things create a maximum confusion for someone who is expecting to
+walk in, read a document, configure ten parameters and go about their
+day.
 
 ## Why Create a Protocol That Handles Negotiation at All?
 
@@ -97,14 +94,15 @@ works with any protocol. Write SCRAM-SHA-256 once. Use it in SMTP, IMAP,
 LDAP and anything else that speaks SASL. The protocol says "authenticate
 me" and SASL handles the rest.
 
-So, the framework is sound. The mechanisms it accumulated over thirty
-years are the problem. The 1990s were still Wild-Wild West territory
-on the Internet. Essentially, it was the equivalent of building the
-railroad network. Authentication wise, people threw shit on the wall
-and saw what stuck. And while I can now look back and make easy
-criticism, people at the time honestly thought it was an elegant
-solution. History now has shown otherwise and a lot of protocols are
-going back to having one less dependency.
+So, the framework is sound, in theory. But on top of being designed by
+a comitee, the mechanisms it accumulated over thirty years are a problem.
+The 1990s were still Wild-Wild West territory on the Internet.
+Essentially, it was the equivalent of building the railroad network.
+Authentication wise, people threw shit on the wall and saw what stuck. 
+And while I can now look back and make easy criticism, people at the
+time honestly thought it was an elegant solution. History now has shown
+otherwise and a lot of protocols are going back to having one less
+dependency.
 
 ## Password Storage Schemes in the LDAP `userPassword` Attribute
 
@@ -805,3 +803,22 @@ advertise at most two mechanisms and reject everything else at the
 configuration level, not leave it up to the client to "pick the strongest
 it supports" while quietly also offering DIGEST-MD5 because nobody
 cleaned up the config file.
+
+There are additional unexpected and unorthogonal issues with LDAP:
+For example, picking DIGEST-MD5 as the password storing mechanism;
+it was the mandatory LDAPv3 mechanism in the 2000s and using it
+meant you had to store cleartext passwords in a separate
+from-the-system database, which there was no way to automatically 
+keep in sync with the system one. And the glue for the functionality
+was not provided. So, you had two password databases and everybody
+had to make their own glue. So, it sucked. On the other hand, picking
+SCRAM-SHA-256 meant doing it correctly, because no passwords or hashes
+were ever exchanged. But picking SCRAM-SHA-256 meant that you had to
+invest in a time machine because it did not exist in the 1990s (RFC
+5802, 2010). And then there was GSSAPI: Picking it meant not storing
+passwords in LDAP at all, which is the most correct answer of them
+all, but picking GSSAPI meant reading the source code for the MIT
+Kerberos to understand what is going on, before implementing GSSAPI
+for your site.
+
+
