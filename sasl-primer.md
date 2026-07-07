@@ -48,6 +48,9 @@ than LDAP, SMTP, IMAP and every other protocol each rolling their own
 broken login system, SASL provides a plug-in interface: the protocol says
 "we need to authenticate" and SASL handles the how.
 
+
+IT DOES TWO THINGS AUTHENTICATION AND PASSWORD STORAGE
+s
 The way it works: the server publishes a list of mechanisms it accepts.
 The client picks one. They perform the exchange that mechanism requires.
 If successful, the protocol gets a "we are good to go" answer and
@@ -883,3 +886,118 @@ Kerberos to understand what is going on, before implementing GSSAPI
 for your site.
 
 
+## What is left to do for the primer
+
+Run `sasl-test-plan.md` against the live server: every mechanism, every password scheme. Record actual results in the primer (right now the behavior is documented from reading, not testing).
+
+Still to write: GSSAPI + Kerberos setup guide (the book skips it, nobody else explains it well). Still to verify: the `{SASL}` pass-through path with an actual `saslauthd`.
+
+Pick up in December with VMs.
+
+## SASL Mechanism Test Plan
+
+### PLAIN
+- [ ] Set `sasl=0` in security directive
+- [ ] Test with `{CLEARTEXT}` in `userPassword`, verify it matches
+- [ ] Test with `{SSHA}` in `userPassword`, verify it matches
+- [ ] Test with `{SCRAM-SHA-256}` in `userPassword`, verify it matches
+- [ ] Test with multiple `userPassword` values, verify first-match-wins order
+- [ ] Test with wrong password, verify failure
+- [ ] Test without TLS (`ldap://`), verify blocked by `simple_bind=256`
+- [ ] Test with `sasl=0`, verify passes
+- [ ] Test with `sasl=56`, verify blocked
+- [ ] Test with `sasl=128`, verify blocked
+- [ ] Test with `sasl=256`, verify blocked
+- [ ] Test with `disallow bind_simple` active, verify PLAIN still works (it is SASL, not simple)
+- [ ] Test: `ldapsearch -Y PLAIN -U cn=admin,dc=marsel,dc=is -y ~/.ldappasswd -H ldaps://ldap.marsel.is -b dc=marsel,dc=is "(objectclass=*)"`
+- [ ] Document result in primer
+
+### SCRAM-SHA-256
+- [ ] Set `password-hash {SCRAM-SHA-256}` in `slapd.conf`
+- [ ] Reset test user password with `ldappasswd`
+- [ ] Verify `{SCRAM-SHA-256}` verifier stored in `userPassword`
+- [ ] Test with correct password, verify success
+- [ ] Test with wrong password, verify failure
+- [ ] Test with only `{SSHA}` in `userPassword`, verify failure (no exact scheme match)
+- [ ] Test with `sasl=256` active, verify blocked
+- [ ] Test with `disallow bind_simple` active, verify SCRAM still works
+- [ ] Test: `ldapsearch -Y SCRAM-SHA-256 -U cn=admin,dc=marsel,dc=is -y ~/.ldappasswd -H ldaps://ldap.marsel.is -b dc=marsel,dc=is "(objectclass=*)"`
+- [ ] Document result in primer
+
+### SCRAM-SHA-512
+- [ ] Set `password-hash {SCRAM-SHA-512}` in `slapd.conf`
+- [ ] Reset test user password with `ldappasswd`
+- [ ] Verify `{SCRAM-SHA-512}` verifier stored in `userPassword`
+- [ ] Test with correct password, verify success
+- [ ] Test with wrong password, verify failure
+- [ ] Test with only `{SCRAM-SHA-256}` in `userPassword`, verify failure (wrong scheme)
+- [ ] Test with `sasl=256` active, verify blocked
+- [ ] Test with `disallow bind_simple` active, verify SCRAM still works
+- [ ] Test: `ldapsearch -Y SCRAM-SHA-512 -U cn=admin,dc=marsel,dc=is -y ~/.ldappasswd -H ldaps://ldap.marsel.is -b dc=marsel,dc=is "(objectclass=*)"`
+- [ ] Document result in primer
+
+### GSSAPI
+- [ ] Install `libsasl2-modules-gssapi-mit`
+- [ ] Create service principal `ldap/ldap.marsel.is@MARSEL.IS`
+- [ ] Export keytab to `/etc/ldap/ldap.keytab`
+- [ ] Set `KRB5_KTNAME` in slapd environment
+- [ ] Set `mech_list: GSSAPI` in `/etc/sasl2/slapd.conf`
+- [ ] Verify `userPassword` is absent from test user entry
+- [ ] Obtain TGT: `kinit admin@MARSEL.IS`
+- [ ] Test with valid ticket, verify success
+- [ ] Test with expired ticket, verify failure
+- [ ] Test with `sasl=256` active, verify passes (GSSAPI provides SSF=256)
+- [ ] Test with `disallow bind_simple` active, verify GSSAPI still works
+- [ ] Test: `ldapsearch -Y GSSAPI -H ldaps://ldap.marsel.is -b dc=marsel,dc=is "(objectclass=*)"`
+- [ ] Document result in primer
+
+### EXTERNAL
+- [ ] Set `TLSVerifyClient demand` in `slapd.conf`
+- [ ] Add `TLS_CERT` and `TLS_KEY` to `~/.ldaprc`
+- [ ] Add `authz-regexp` mapping in `slapd.conf`
+- [ ] Test with valid client cert, verify success
+- [ ] Test with expired client cert, verify failure
+- [ ] Test with cert from untrusted CA, verify failure
+- [ ] Test without client cert, verify failure
+- [ ] Test with `sasl=256` active, verify passes (EXTERNAL provides SSF=256)
+- [ ] Test with `disallow bind_simple` active, verify EXTERNAL still works
+- [ ] Verify `userPassword` is never read
+- [ ] Test: `ldapsearch -Y EXTERNAL -H ldaps://ldap.marsel.is -b dc=marsel,dc=is "(objectclass=*)"`
+- [ ] Document result in primer
+
+### DIGEST-MD5
+- [ ] Install `sasl2-bin`
+- [ ] Remove `noactive` from `sasl-secprops`
+- [ ] Add user to `sasldb2` with `saslpasswd2`
+- [ ] Set `mech_list: DIGEST-MD5` in `/etc/sasl2/slapd.conf`
+- [ ] Test with correct `sasldb2` password, verify success
+- [ ] Test with `{CLEARTEXT}` in `userPassword` only, verify failure (sasldb2 not read)
+- [ ] Test with wrong password, verify failure
+- [ ] Test with `disallow bind_simple` active, verify DIGEST-MD5 still works
+- [ ] Test: `ldapsearch -Y DIGEST-MD5 -U admin -y ~/.ldappasswd -H ldaps://ldap.marsel.is -b dc=marsel,dc=is "(objectclass=*)"`
+- [ ] Document result in primer
+- [ ] Revert: re-enable `noactive`, remove from `mech_list`
+
+### CRAM-MD5
+- [ ] Install `sasl2-bin`
+- [ ] Remove `noactive` from `sasl-secprops`
+- [ ] Add user to `sasldb2` with `saslpasswd2`
+- [ ] Set `mech_list: CRAM-MD5` in `/etc/sasl2/slapd.conf`
+- [ ] Test with correct `sasldb2` password, verify success
+- [ ] Test with `{CLEARTEXT}` in `userPassword` only, verify failure
+- [ ] Test with wrong password, verify failure
+- [ ] Test with `disallow bind_simple` active, verify CRAM-MD5 still works
+- [ ] Test: `ldapsearch -Y CRAM-MD5 -U admin -y ~/.ldappasswd -H ldaps://ldap.marsel.is -b dc=marsel,dc=is "(objectclass=*)"`
+- [ ] Document result in primer
+- [ ] Revert: re-enable `noactive`, remove from `mech_list`
+
+### NTLM
+- [ ] Remove `NTLM` exclusion from `sasl-secprops`
+- [ ] Set `mech_list: NTLM` in `/etc/sasl2/slapd.conf`
+- [ ] Add user to `sasldb2` with `saslpasswd2`
+- [ ] Test with correct `sasldb2` password, verify success
+- [ ] Test with `{CLEARTEXT}` in `userPassword` only, verify failure
+- [ ] Test with `disallow bind_simple` active, verify NTLM still works
+- [ ] Test: `ldapsearch -Y NTLM -U admin -y ~/.ldappasswd -H ldaps://ldap.marsel.is -b dc=marsel,dc=is "(objectclass=*)"`
+- [ ] Document result in primer
+- [ ] Revert immediately
