@@ -189,5 +189,10 @@ is polish, never protocol progress. Semantics come first.
   ldap4: mapping failure is bind failure. No entry, no session. Authc
   and directory identity may never diverge.
 
-
-
+- **Uppercase realm convention.** K5 convention uppercases realms
+  (MARSEL.IS) purely to distinguish them visually from DNS names; it
+  carries no meaning. Kerberos 6: realms are lowercase, DNS-qualified,
+  canonical. Accepts K5 uppercase input case-insensitively and folds to
+  lowercase. Realm folding only -- principal local-part case policy is
+  specified separately and is NOT folded blindly (george@ vs George@
+  must not silently collide).
