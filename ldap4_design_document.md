@@ -139,3 +139,33 @@ Patches offered to major LDAP-integrated applications (Confluence, Jira, Jenkins
 **Licensing**
 
 GPL3. One license, no tiers, no enterprise edition carveout.
+
+## Historical leftovers from X.500
+
+LDAP inherited vocabulary and structure from X.500/OSI that no longer
+describe what the operations do. ldap4 keeps the wire behavior where
+compatibility demands it but does not treat the inherited names as
+sacred.
+
+Known leftovers:
+
+- **bind / unbind.** X.500 terms for attaching an identity to an
+  application association (connection), by analogy to binding to a
+  socket. "Bind" does not mean "authenticate" in the abstract; it means
+  "associate this identity with this connection." The modern operation
+  is unchanged and necessary. Only the name is a leftover. Client verb
+  undecided; not a priority.
+
+- **Anonymous pre-auth search.** The authz identity resolution search
+  runs as anonymous because no identity exists yet at that point. This
+  is a structural leftover, not a feature. ldap4 replaces it with a
+  scoped internal resolver identity (read uid under the user subtree
+  only), never anonymous, never omnipotent.
+
+- **DN as both name and location.** Inherited assumption that an entry's
+  name encodes its position in the tree. Retained, but see the
+  narrowest-subtree and no-cross-authority-dereference rules for how
+  ldap4 constrains what that location may be used for.
+
+Rule: inherited names are cosmetic and may be modernized, but renaming
+is polish, never protocol progress. Semantics come first.
