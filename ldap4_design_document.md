@@ -178,6 +178,16 @@ Known leftovers:
   ldap4 constrains what that location may be used for.
 
 Rule: inherited names are cosmetic and may be modernized, but renaming
-
-
 is polish, never protocol progress. Semantics come first.
+
+
+- **Mapping failure does not fail the bind.** In slapd, if authz-regexp
+  authenticates a SASL identity but the mapping search finds no DIT
+  entry, the bind still succeeds with the raw auth identity
+  (uid=x,cn=GSSAPI,cn=auth). Fail-open: an authenticated-but-unmapped
+  session exists, and loose ACLs (by users) can grant it access.
+  ldap4: mapping failure is bind failure. No entry, no session. Authc
+  and directory identity may never diverge.
+
+
+
