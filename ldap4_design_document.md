@@ -198,3 +198,12 @@ is polish, never protocol progress. Semantics come first.
   cannot both exist. Store as-entered for display plus a folded
   lowercase key for uniqueness and lookup. Collision checks and lookups
   use the folded key; display uses the original.
+
+- **Realm defaulting.** slapd's sasl-realm is a soft default: the client
+  may omit the realm and get this one, or send a different realm and
+  have it accepted. ldap4: the realm is fixed to the server's single
+  storage authority. Omitting the realm implies the local realm. Sending
+  a DIFFERENT realm is not a defaultable value -- it is a cross-realm
+  request, resolved only through explicit inter-realm trust, never
+  silently accepted at bind. Local realm is the only value, not a
+  mutable default.
