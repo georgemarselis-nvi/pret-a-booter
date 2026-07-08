@@ -140,6 +140,16 @@ Patches offered to major LDAP-integrated applications (Confluence, Jira, Jenkins
 
 GPL3. One license, no tiers, no enterprise edition carveout.
 
+- **ACL engine has no "server itself" identity.** The authz resolution
+  search is modeled as anonymous only because slapd's ACL namespace
+  contains bind identities (anonymous, users, DNs) but no concept of
+  the server reading its own directory for its own auth machinery. This
+  forces granting anonymous read on uid just to make the server's own
+  resolver work. Backwards. ldap4: identity resolution is an internal
+  server capability (read uid under the user subtree), not an entry in
+  the ACL namespace. Nothing anonymous is granted; no external identity
+  can inherit the resolver's read.
+
 ## Historical leftovers from X.500
 
 LDAP inherited vocabulary and structure from X.500/OSI that no longer
@@ -168,4 +178,6 @@ Known leftovers:
   ldap4 constrains what that location may be used for.
 
 Rule: inherited names are cosmetic and may be modernized, but renaming
+
+
 is polish, never protocol progress. Semantics come first.
