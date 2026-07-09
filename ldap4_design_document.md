@@ -218,3 +218,20 @@ is polish, never protocol progress. Semantics come first.
   amendment to the standard, declared once, not a regex each admin
   invents.
 
+- **Naming is structurally unspecified.** X.520/RFC 4519 defines cn as a
+  human-readable name: no uniqueness, no stability, no machine
+  semantics. RFC 4514 defines DN string syntax and X.501 the RDN model,
+  but neither mandates which attribute types name which entry kinds.
+  The standard specifies grammar, never meaning. Every deployment
+  invents its own convention, which is why cert-DN-to-directory-DN
+  mapping is a per-site regex rather than a defined function.
+
+  ldap4: naming is mandatory and fixed.
+  - Users are named by uid. Always. uid is the identifier: unique,
+    stable, machine-readable, never reused.
+  - cn is display only. It is never an RDN, never an identifier, never
+    parsed, never mapped.
+  - Entry kind determines RDN attribute by rule, not by deployer choice.
+  - Certificates name the directory identity directly. No scraping cn.
+
+
