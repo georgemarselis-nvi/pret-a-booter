@@ -207,3 +207,14 @@ is polish, never protocol progress. Semantics come first.
   request, resolved only through explicit inter-realm trust, never
   silently accepted at bind. Local realm is the only value, not a
   mutable default.
+
+- **Identity translation between cert DN and directory DN.** X.509
+  subject DNs and directory DNs are separate namespaces that share
+  X.500 syntax by accident of common ancestry. slapd bridges them with
+  a per-deployment authz-regexp: a hand-written guess, not a defined
+  mapping. ldap4: no implicit translation. The certificate names the
+  directory identity directly, or the cert carries an explicit,
+  standardized identity claim. Any mapping between namespaces is an
+  amendment to the standard, declared once, not a regex each admin
+  invents.
+
