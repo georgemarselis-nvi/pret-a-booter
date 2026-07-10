@@ -318,9 +318,16 @@ subcommand.
   effective permission set per (identity, entry, attribute) scope. The
   request path is a bitmask AND, not a rule walk.
 
-  - ACL writes invalidate and recompute the affected scope.
-  - `ldapctl acl explain` reports the derivation that produced the
-    materialized result, so precomputation does not cost auditability.
-  - Cost moves from the hot path (every read) to the cold path (rare
-    policy change), which is where it belongs.
+- ACL writes invalidate and recompute the affected scope.
+- `ldapctl acl explain` reports the derivation that produced the
+  materialized result, so precomputation does not cost auditability.
+- Cost moves from the hot path (every read) to the cold path (rare
+  policy change), which is where it belongs.
+
+- **Two ACL scopes (global and per-database).** slapd allows access
+  directives both outside and inside a database section; they combine
+  by file position across two namespaces, with no way to inspect the
+  composite. ldap4: ACLs are entries in the DIT and inherit downward
+  from the authority's suffix. One scope, one namespace, no global/local
+  distinction.
 
