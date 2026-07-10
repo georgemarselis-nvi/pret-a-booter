@@ -299,4 +299,16 @@ subcommand.
     the authority for cert material; the directory holds a reference,
     not a copy.
 
+- **ACLs as a blank slate.** slapd ships with no meaningful access
+  control; the admin writes every rule, including the ones with only
+  one correct answer (userPassword must be auth-only; cn=config is
+  admin-only; anonymous gets nothing). Every deployment reinvents them
+  and some get them wrong. This is a defect in the server, not a task
+  for the operator.
+
+  ldap4: structural security defaults are mandatory and shipped. They
+  are not templates and cannot be disabled, only extended. Site
+  authorization policy sits on top as explicit, explainable rules.
+  The admin declares business policy; the admin never has to hand-write
+  the rules that protect the directory from itself.
 
