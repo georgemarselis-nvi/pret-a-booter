@@ -356,3 +356,14 @@ subcommand.
 
   A tree with no enforced shape cannot have computable identity
   locations, which is the property everything else depends on.
+
+- **Synonym scope keywords.** slapd accepts dn.sub as a synonym for
+  dn.subtree, and abbreviated forms elsewhere. Multiple spellings for
+  one meaning, no canonical form.
+
+  ldap4: long form only in stored rules. dn.subtree, never dn.sub.
+  ldapctl accepts synonyms on input but rewrites them to canonical long
+  form on write (or emits a deprecation warning). Stored config has
+  exactly one spelling per concept.
+
+
