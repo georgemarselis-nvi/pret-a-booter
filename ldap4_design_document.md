@@ -331,3 +331,28 @@ subcommand.
   from the authority's suffix. One scope, one namespace, no global/local
   distinction.
 
+- **DIT structure is unenforced.** X.500 defines DIT structure rules and
+  DIT content rules governing which entry kinds may parent which
+  others. OpenLDAP does not implement them: any entry may be placed
+  under any entry. Combined with unrestricted RDN choice, the tree has
+  no enforced shape.
+
+  ldap4: entry kind determines its RDN attribute and its permitted
+  parent. Specifically:
+
+  - **Core structure rules are mandatory and not editable.** Users,
+    services, groups, and system entries have fixed placement. New entry
+    kinds declare their own rules as data, validated against the core;
+    a declared rule may narrow but never widen the core.
+  - **Kind is immutable.** objectClass determining entry kind cannot be
+    modified after creation. Changing kind requires delete and recreate,
+    which revalidates placement.
+  - **Every write path validates.** add, modrdn, moddn, and import all
+    revalidate placement. A legal entry cannot be moved into an illegal
+    position, and imported data is never trusted.
+  - **User and service subtrees are flat.** No nested OUs beneath them.
+    uid=george resolves to exactly one DN, computed, never searched.
+    Depth would reintroduce the search this design exists to eliminate.
+
+  A tree with no enforced shape cannot have computable identity
+  locations, which is the property everything else depends on.
