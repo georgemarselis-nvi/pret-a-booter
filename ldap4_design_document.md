@@ -289,4 +289,14 @@ subcommand.
 - Exit codes are meaningful and documented. No parsing stderr to find
   out what happened.
 
+- **No binary values.** All attribute values are UTF-8 strings. LDIF
+  base64 (`::`) is removed; JSON needs no encoding tag; conversion
+  between LDIF and JSON is semantically lossless with no binary
+  special-case.
+  - `jpegPhotoURL`, `audioURL`: URLs, clients fetch and render.
+  - `userCertificateURL`: URL pointing at the issued certificate,
+    served by the CA. Replaces inline DER `userCertificate`. The CA is
+    the authority for cert material; the directory holds a reference,
+    not a copy.
+
 
