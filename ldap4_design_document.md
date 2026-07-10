@@ -234,4 +234,35 @@ is polish, never protocol progress. Semantics come first.
   - Entry kind determines RDN attribute by rule, not by deployer choice.
   - Certificates name the directory identity directly. No scraping cn.
 
+- **ACLs as ordered flat-file directives.** slapd evaluates access rules
+  sequentially, first match wins, order determined by position in
+  slapd.conf. Correctness depends on invisible file ordering; the book
+  repeatedly instructs "put this rule at the top." Moving a rule
+  silently changes authorization.
+
+  ldap4: ACLs are entries in the database, managed via `ldapctl acl`.
+
+  - **Full evaluation, not first-match.** Every rule applicable to the
+    target entry and attribute is evaluated. There is no early exit, so
+    rule order carries no meaning and cannot be a source of silent
+    breakage.
+  - **Deny wins.** A deny at any depth overrides an allow at any depth.
+    Fail-closed. This is only coherent under full evaluation, which is
+    why first-match is abandoned.
+  - **Recursion is the default.** Rules inherit downward through the
+    subtree. Not an option, not a flag.
+  - **No implicit ordering.** Insertion order is not semantics. If a
+    deployment ever needs explicit precedence, it is a declared
+    attribute on the rule, queryable and auditable, never file position.
+  - **Decisions are explainable.** Every authorization decision can be
+    traced: `ldapctl acl explain <dn> <attr> <identity>` returns every
+    rule that matched, which granted, which denied, and why the result
+    is what it is. Not a debug mode: a first-class operation, always
+    available.
+  - **Shadowing is detectable.** Because all matches are evaluated,
+    `ldapctl acl lint` can report rules that can never grant anything
+    (fully shadowed by a deny) or that overlap ambiguously. Under
+    first-match-wins these rules are invisible dead code.
+
+
 
