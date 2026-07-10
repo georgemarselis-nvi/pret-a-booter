@@ -312,3 +312,15 @@ subcommand.
   The admin declares business policy; the admin never has to hand-write
   the rules that protect the directory from itself.
 
+- **ACL evaluation is precomputed, not re-derived per request.** slapd
+  walks its rule list on every operation. ldap4 evaluates the full rule
+  set (deny-wins, recursive) once, at ACL write time, producing an
+  effective permission set per (identity, entry, attribute) scope. The
+  request path is a bitmask AND, not a rule walk.
+
+  - ACL writes invalidate and recompute the affected scope.
+  - `ldapctl acl explain` reports the derivation that produced the
+    materialized result, so precomputation does not cost auditability.
+  - Cost moves from the hot path (every read) to the cold path (rare
+    policy change), which is where it belongs.
+
