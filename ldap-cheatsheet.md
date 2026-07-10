@@ -198,12 +198,25 @@ ldapsearch -x -y ~/.ldappasswd -H ldaps://ldap.marsel.is -b dc=marsel,dc=is "(ob
 
 ## ACL DN scope keywords
 
-| Scope         | Base? | Children? | Meaning                      | Synonyms                   |
-|---------------|-------|-----------|------------------------------|----------------------------|
-| `dn.base`     | yes   | no        | the named DN only            | `dn.exact`, `dn.baselevel` |
-|`dn.one`       | no    | 1 level   | immediate children only      | `dn.onelevel`              |
-| `dn.subtree`  | yes   | all       | the DN plus everything below | `dn.sub`                   |
-| `dn.children` | no    | all       | everything below, not the DN | none                       |
+| Scope         | Base? | Children? | Meaning                          | Synonyms                   |
+|---------------|-------|-----------|----------------------------------|----------------------------|
+| `dn.base`     | yes   | no        | the named DN only                | `dn.exact`, `dn.baselevel` |
+|`dn.one`       | no    | 1 level   | immediate children only          | `dn.onelevel`              |
+| `dn.subtree`  | yes   | all       | the DN plus everything below     | `dn.sub`                   |
+| `dn.children` | no    | all       | everything below, not the DN     | none                       |
+| `dn.regex`    | n/a   | n/a       | DN matched by regular expression | none                       |
 
 - `dn.subtree` = `dn.base` + `dn.children`
 - `dn.one` covers only direct children, not deeper descendants
+- `dn.regex="uid=[^,]+,ou=Users,dc=example,dc=com"`
+
+## dn.regex scope
+
+dn.regex is not ACL-only. slapd reuses the same regex DN-matching engine
+across config directives:
+
+- ACL selectors: `access to dn.regex=...`, `by dn.regex=...`
+- `authz-regexp` (SASL identity to DN mapping)
+- `limits dn.regex=...`
+- other DN-matching selectors
+

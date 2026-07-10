@@ -366,4 +366,9 @@ subcommand.
   form on write (or emits a deprecation warning). Stored config has
   exactly one spelling per concept.
 
-
+ldap4: no dn.regex anywhere. The objection is correctness, not speed: a
+regex over DN strings is a per-deployment guess that breaks when RDN
+order or structure changes. DN shape is enforced structure, not a
+pattern to match. Where slapd used dn.regex:
+- authz mapping: replaced by direct naming (cert/identity names the DN)
+- ACLs and limits: match on attributes with a filter, not on DN shape
