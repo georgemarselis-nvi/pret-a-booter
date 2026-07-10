@@ -372,3 +372,25 @@ order or structure changes. DN shape is enforced structure, not a
 pattern to match. Where slapd used dn.regex:
 - authz mapping: replaced by direct naming (cert/identity names the DN)
 - ACLs and limits: match on attributes with a filter, not on DN shape
+
+- **@ notation tab-completion.** ldapctl completes attrs=@<TAB> against
+  the loaded schema: lists objectClasses, and on a second tab expands
+  the inherited attribute set so the admin sees exactly what @class
+  covers before committing. Silent inheritance becomes visible at the
+  point of writing the rule.
+
+- **@ inheritance is silent and greedy.** slapd's attrs=@class includes
+  every inherited attribute, invisibly. ldap4:
+  - Expansion is shown at write time. ldapctl resolves @class to its
+    concrete attribute set and displays/logs it; the rule stores @class
+    but the resolved set is never hidden.
+  - No silent transitive inclusion.
+
+- **@ vs @= notation.**
+  - @class  : all attributes of the class, including inherited
+             (slapd-compatible, unchanged).
+  - @=class : only the attributes the class itself declares, no
+             inherited attributes ("this class exactly").
+
+  Both expand visibly at write time: ldapctl resolves to a concrete
+  attribute set and shows it before commit. Inheritance is never hidden.
