@@ -195,3 +195,15 @@ openssl s_client -connect ldap.marsel.is:636 2>/dev/null | grep "Verify return c
 ldapsearch -x -y ~/.ldappasswd -H ldaps://ldap.marsel.is -b dc=marsel,dc=is "(objectclass=*)"
 # TODO: create SASL user (uid= entry with userPassword: {SASL}username) after reading SASL section
 # TODO: configure SASL mechanism restriction to SCRAM-SHA-256/512 only in slapd.conf
+
+## ACL DN scope keywords
+
+| Scope         | Base? | Children? | Meaning                      | Synonyms                   |
+|---------------|-------|-----------|------------------------------|----------------------------|
+| `dn.base`     | yes   | no        | the named DN only            | `dn.exact`, `dn.baselevel` |
+|`dn.one`       | no    | 1 level   | immediate children only      | `dn.onelevel`              |
+| `dn.subtree`  | yes   | all       | the DN plus everything below | `dn.sub`                   |
+| `dn.children` | no    | all       | everything below, not the DN | none                       |
+
+- `dn.subtree` = `dn.base` + `dn.children`
+- `dn.one` covers only direct children, not deeper descendants
