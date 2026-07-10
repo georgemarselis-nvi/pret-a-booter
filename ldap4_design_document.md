@@ -264,5 +264,29 @@ is polish, never protocol progress. Semantics come first.
     (fully shadowed by a deny) or that overlap ambiguously. Under
     first-match-wins these rules are invisible dead code.
 
+## Client tooling
+
+Single binary, subcommand grammar: `ldapctl`.
+
+Replaces the ldapsearch/ldapadd/ldapmodify/ldapdelete/ldappasswd family.
+Consistent with `certctl` (libcertstore). Subcommands are nouns then
+verbs: `ldapctl acl explain`, `ldapctl entry get`, `ldapctl schema show`.
+
+## Machine interface
+
+`ldapctl` supports `--json` for both input and output on every
+subcommand.
+
+- **Output**: structured JSON, stable schema, suitable for parsing.
+  Human-readable text is the default; `--json` is the contract.
+- **Input**: declarative. `ldapctl entry set --json` applies desired
+  state and reports what changed. Idempotent by construction: applying
+  the same document twice is a no-op. This is the property Ansible and
+  any other configuration tool requires.
+- **LDIF** remains the interchange format for import/export with other
+  directory implementations. JSON is the machine interface; LDIF is the
+  wire format for portability. Both, not one.
+- Exit codes are meaningful and documented. No parsing stderr to find
+  out what happened.
 
 
