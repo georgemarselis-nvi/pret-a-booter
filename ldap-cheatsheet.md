@@ -463,3 +463,16 @@ authorization silently.
 Every who-list ends with an implicit `by * none stop`. If your rule did
 not grant it, it is denied here, even if a later rule would have granted
 it (unless you used break).
+
+- **rootdn bypasses all access control, unconditionally.** cn=admin
+  (rootdn) ignores every ACL; by * none does not apply. One identity
+  with total, unrestrictable, unauditable power, a single point of full
+  compromise, retained because early slapd needed a break-glass account
+  that could not lock itself out.
+
+- **rootdn naming drift (cn=Manager vs cn=admin).** The superuser is
+  whatever DN rootdn names; it is not a fixed identity. OpenLDAP docs
+  use cn=Manager, Debian uses cn=admin, others differ. Same role, no
+  canonical spelling, so every deployment's break-glass DN is different
+  and cross-references (docs, playbooks, runbooks) silently mismatch.
+

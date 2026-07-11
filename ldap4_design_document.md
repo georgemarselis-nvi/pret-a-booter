@@ -448,3 +448,29 @@ ldap4:
   ldapctl acl explain <dn> <attr> <identity> prints the resolved
   capability set in whole words. No mental evaluation of level
   implication or flag arithmetic.
+
+- **rootdn bypasses all access control, unconditionally.** cn=admin
+  (rootdn) ignores every ACL; by * none does not apply. One identity
+  with total, unrestrictable, unauditable power, a single point of full
+  compromise, retained because early slapd needed a break-glass account
+  that could not lock itself out.
+
+  ldap4: no unrestrictable superuser as the normal admin identity.
+  - Administrative capability is granted through the same ACL system as
+    everyone else, and is itself subject to deny rules and audit.
+  - A break-glass identity exists but is: offline by default, requires
+    hardware (YubiHSM) to activate, every use is logged, and it cannot
+    be the standing day-to-day admin.
+  - No identity is exempt from audit. Power is grantable and revocable,
+    never inherent and invisible.
+
+- **rootdn naming drift (cn=Manager vs cn=admin).** The superuser is
+  whatever DN rootdn names; it is not a fixed identity. OpenLDAP docs
+  use cn=Manager, Debian uses cn=admin, others differ. Same role, no
+  canonical spelling, so every deployment's break-glass DN is different
+  and cross-references (docs, playbooks, runbooks) silently mismatch.
+
+  ldap4: the break-glass role has ONE canonical name across all
+  deployments. Not a per-distro convention, not a free-text rootdn
+  string each admin invents. The name is part of the spec, so a runbook
+  written for one install applies to every install.
