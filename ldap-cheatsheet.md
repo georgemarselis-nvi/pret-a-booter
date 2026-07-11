@@ -274,8 +274,23 @@ access to dn.base="ou=People,dc=example,dc=com" attrs=children
 val.children="ou=People,..." = match entries whose attribute value is a DN strictly below that base.
 attrs=children = permission over the child entries of the target.
 
+## children: two unrelated meanings
 
+`attrs=children` and `val.children` share a word but cannot combine.
 
+# attrs=children : pseudo-target, permission over child ENTRIES
+# takes no val (no attribute, no value to filter)
+access to dn.base="ou=People,dc=example,dc=com" attrs=children
+        by dn.exact="cn=admin,dc=example,dc=com" write
+        by * none
+
+# val.children : value-match style for a DN-valued ATTRIBUTE
+# value must be a DN strictly below the base
+access to attrs=member val.children="ou=Groups,dc=example,dc=com"
+        by * read
+
+# INVALID: attrs=children takes no val
+# access to attrs=children val.children="..."   <- does not work
 
 
 
