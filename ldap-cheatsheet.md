@@ -293,6 +293,56 @@ access to attrs=member val.children="ou=Groups,dc=example,dc=com"
 # access to attrs=children val.children="..."   <- does not work
 
 
+## Alternate matching rules (val/)
+
+val compares using the attribute's default equality matching rule.
+Override per-ACL with val/<rule>, naming the matching rule or its OID.
+The rule must be loaded in the schema and compatible with the
+attribute's syntax.
+
+# override to case-sensitive
+access to attrs=givenName val/caseExactMatch="Matt"
+        by * none
+
+# by OID
+access to attrs=givenName val/2.5.13.5="Matt"
+        by * none
+
+### Standard matching rules (RFC 4517)
+
+Name                               OID           Use
+---------------------------------  ------------  --------------------------
+objectIdentifierMatch               2.5.13.0      OID equality
+distinguishedNameMatch              2.5.13.1      DN equality
+caseIgnoreMatch                     2.5.13.2      string, case-insensitive
+caseIgnoreOrderingMatch             2.5.13.3      string ordering, ci
+caseIgnoreSubstringsMatch           2.5.13.4      substring, ci
+caseExactMatch                      2.5.13.5      string, case-sensitive
+caseExactOrderingMatch              2.5.13.6      string ordering, cs
+caseExactSubstringsMatch            2.5.13.7      substring, cs
+numericStringMatch                  2.5.13.8      numeric string
+numericStringOrderingMatch          2.5.13.9      numeric ordering
+numericStringSubstringsMatch        2.5.13.10     numeric substring
+caseIgnoreListMatch                 2.5.13.11     list, ci
+integerMatch                        2.5.13.14     integer equality
+integerOrderingMatch                2.5.13.15     integer ordering
+bitStringMatch                      2.5.13.16     bit string
+octetStringMatch                    2.5.13.17     binary exact
+octetStringOrderingMatch            2.5.13.18     binary ordering
+telephoneNumberMatch                2.5.13.20     phone (ignores spaces/-)
+telephoneNumberSubstringsMatch      2.5.13.21     phone substring
+generalizedTimeMatch                2.5.13.27     timestamp equality
+generalizedTimeOrderingMatch        2.5.13.28     timestamp ordering
+integerFirstComponentMatch          2.5.13.29     integer first component
+objectIdentifierFirstComponentMatch 2.5.13.30     OID first component
+directoryStringFirstComponentMatch  2.5.13.31     string first component
+
+### List what your server actually loaded
+
+ldapsearch -x -b cn=subschema -s base matchingRules
+
+# or just the names/OIDs
+ldapsearch -x -b cn=subschema -s base matchingRules \
 
 
 

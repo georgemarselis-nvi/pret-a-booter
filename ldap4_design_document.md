@@ -403,3 +403,4 @@ pattern to match. Where slapd used dn.regex:
   ldap4: value-level ACL is a structured predicate (attr, op, value)
   set via ldapctl, same engine as attribute ACLs. No separate val
   grammar, no duplicated scope styles.
+
