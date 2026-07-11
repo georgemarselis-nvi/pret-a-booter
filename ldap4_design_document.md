@@ -488,3 +488,20 @@ ldap4:
     own (see domain= trap).
   - membership/set: expressed as a predicate/query, not a who-keyword.
   No combinatorial who-soup.
+
+
+- **group ACL restates schema per rule.** slapd's by group/OC/attr=
+    requires naming the group's objectClass and membership attribute in
+    every rule (groupOfNames/member vs groupOfUniqueNames/uniqueMember),
+    because the server will not infer them. The most common authz
+    primitive carries schema plumbing in every line.
+
+    ldap4: group is a mandatory core kind with ONE fixed membership
+    representation defined by the schema. The server resolves membership
+    itself. Rules name only the group:
+      grant write to <target> for group "cn=admins"
+    No objectClass, no membership-attribute, no per-rule schema. Nailing
+    the mandatory core schema is precisely what lets the server be
+    schema-aware instead of making every ACL respell it.
+
+
