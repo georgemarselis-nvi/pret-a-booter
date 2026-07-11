@@ -544,3 +544,20 @@ No combinatorial who-soup.
   compromised proxy acts as anyone it may proxy. slapd adds real*
   who-forms (realdn, realself, realusers, realanonymous) to match the
   authentication DN, not the proxied one.
+
+## group specifier (by group=...)
+
+Grant access to members of a group. slapd needs the group's objectClass
+and membership attribute spelled out unless you use the defaults.
+
+# default: groupOfNames + member
+by group="cn=Admins,ou=Groups,dc=marsel,dc=is" write
+
+# explicit objectClass + membership attribute
+by group/groupOfUniqueNames/uniqueMember="cn=LDAP Admins,ou=Groups,dc=marsel,dc=is" write
+
+# form
+by group[/<objectClass>[/<attr>]]="<groupDN>" <access>
+
+# groupOfNames        -> member       (default)
+# groupOfUniqueNames  -> uniqueMember (must specify both)
