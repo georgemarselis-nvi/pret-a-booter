@@ -404,3 +404,14 @@ pattern to match. Where slapd used dn.regex:
   set via ldapctl, same engine as attribute ACLs. No separate val
   grammar, no duplicated scope styles.
 
+- **Prefix (Polish) filter notation.** LDAP filters (RFC 4515) are
+  prefix: operator first, self-delimiting groups, e.g.
+  (|(|(givenName=Matt)(givenName=Barbara))(sn=Kant)). Machine-simple
+  (no precedence rules), human-hostile once nested.
+
+  ldap4: ldapctl accepts infix filter input with normal operators and
+  precedence (givenName=Matt OR givenName=Barbara OR sn=Kant) and
+  canonicalizes to the wire form. Prefix remains accepted for
+  compatibility. Stored/displayed form is the readable infix; the
+  prefix wire encoding is an implementation detail, not what the admin
+  reads or writes.
