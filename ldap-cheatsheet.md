@@ -245,3 +245,49 @@ access to attrs=member val.subtree="ou=People,dc=example,dc=com"
 
 val styles: regex, subtree, base, one, exact, children
 (same styles as the dn specifier)
+
+
+
+## Pseudo-attributes: entry and children
+
+Not real attributes. Control the record and the subtree, not values.
+
+# permission to the entry record itself (see/create/delete the object)
+access to attrs=entry
+        by self read
+        by * none
+
+# permission over children (create/delete entries beneath this DN)
+access to dn.base="ou=People,dc=example,dc=com" attrs=children
+        by dn.exact="cn=admin,dc=example,dc=com" write
+        by * none
+
+# adding uid=matt,ou=People requires BOTH:
+#   write on children of ou=People   (permission to add under it)
+#   write on entry of the new record (permission to create the object)
+
+- **children means two things.** attrs=children is a pseudo-target
+  (permission over child entries). val.children is a value-match style
+  (attribute value is a DN below a base). Unrelated, same word. ldap4:
+  rename so the two never share a token.
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
