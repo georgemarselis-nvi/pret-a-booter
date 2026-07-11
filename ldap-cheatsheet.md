@@ -342,7 +342,7 @@ directoryStringFirstComponentMatch  2.5.13.31     string first component
 ldapsearch -x -b cn=subschema -s base matchingRules
 
 # or just the names/OIDs
-ldapsearch -x -b cn=subschema -s base matchingRules \
+ldapsearch -x -b cn=subschema -s base matchingRules  | grep -oE "NAME '[^']+'|[0-9.]+"
 
 
 
