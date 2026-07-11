@@ -476,3 +476,20 @@ it (unless you used break).
   canonical spelling, so every deployment's break-glass DN is different
   and cross-references (docs, playbooks, runbooks) silently mismatch.
 
+## Access levels as privilege sets
+
+Each level is shorthand for a cumulative flag set. Higher levels include
+all lower flags (the silent implication).
+
+Keyword  | Flags   | Adds
+---------|---------|------------------
+none     | 0       | nothing
+disclose | d       | disclose
+auth     | xd      | + authenticate
+compare  | cxd     | + compare
+search   | scxd    | + search
+read     | rscxd   | + read
+write    | wrscxd  | + write
+
+# so `write` silently grants w r s c x d.
+# for an exact set instead of a level, use flags: by * =rd
