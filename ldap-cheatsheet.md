@@ -493,3 +493,26 @@ write    | wrscxd  | + write
 
 # so `write` silently grants w r s c x d.
 # for an exact set instead of a level, use flags: by * =rd
+
+## self / realself prefixes (fused level keywords)
+
+- **self/realself prefixes fused onto levels.** selfwrite, selfread,
+  realselfcompare... = the prefix (value must be the accessor's own DN)
+  welded to the level into one token, producing 7 levels x 2 prefixes
+  of fused keywords.
+
+  The capability is good:
+  - selfwrite on uniqueMember lets a user add/remove ONLY their own DN
+    (self-service group join/leave, no admin touch to others).
+    Example: access to attrs=uniqueMember by users selfwrite
+  - realself = same, but rejects PROXIED DNs (a proxy-authz identity
+    binding as you cannot use it). Tighter.
+
+  The spelling is not: prefix (self-scope) and level (capability) should
+  be orthogonal, not welded into one keyword.
+
+  ldap4: self-scope is an orthogonal condition on the rule, not a
+  keyword prefix.
+    grant write to uniqueMember where value = self
+    grant write to uniqueMember where value = self and not proxied  # realself
+  Condition and capability stay separate; no NxM keyword explosion.
