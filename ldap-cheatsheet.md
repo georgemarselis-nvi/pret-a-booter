@@ -220,3 +220,28 @@ across config directives:
 - `limits dn.regex=...`
 - other DN-matching selectors
 
+
+## Value-level ACLs (val=)
+
+## val= (value-level ACL)
+
+Restrict access by attribute VALUE, not just attribute name.
+
+# exact value
+access to attrs=givenName val="Matt"
+        by * none
+
+# case-insensitive exact (depends on attribute's matching rule)
+access to attrs=givenName val.exact="Matt"
+        by * none
+
+# regex value match
+access to attrs=mail val.regex="^.*@example[.]com$"
+        by * read
+
+# DN-valued attribute, match by subtree
+access to attrs=member val.subtree="ou=People,dc=example,dc=com"
+        by * read
+
+val styles: regex, subtree, base, one, exact, children
+(same styles as the dn specifier)
