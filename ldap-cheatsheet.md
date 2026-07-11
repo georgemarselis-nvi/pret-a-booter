@@ -501,18 +501,39 @@ write    | wrscxd  | + write
   welded to the level into one token, producing 7 levels x 2 prefixes
   of fused keywords.
 
-  The capability is good:
-  - selfwrite on uniqueMember lets a user add/remove ONLY their own DN
-    (self-service group join/leave, no admin touch to others).
-    Example: access to attrs=uniqueMember by users selfwrite
-  - realself = same, but rejects PROXIED DNs (a proxy-authz identity
-    binding as you cannot use it). Tighter.
+The capability is good:
+- selfwrite on uniqueMember lets a user add/remove ONLY their own DN
+  (self-service group join/leave, no admin touch to others).
+  Example: access to attrs=uniqueMember by users selfwrite
+- realself = same, but rejects PROXIED DNs (a proxy-authz identity
+  binding as you cannot use it). Tighter.
 
-  The spelling is not: prefix (self-scope) and level (capability) should
-  be orthogonal, not welded into one keyword.
+The spelling is not: prefix (self-scope) and level (capability) should
+be orthogonal, not welded into one keyword.
 
-  ldap4: self-scope is an orthogonal condition on the rule, not a
-  keyword prefix.
-    grant write to uniqueMember where value = self
-    grant write to uniqueMember where value = self and not proxied  # realself
-  Condition and capability stay separate; no NxM keyword explosion.
+ldap4: self-scope is an orthogonal condition on the rule, not a
+keyword prefix.
+  grant write to uniqueMember where value = self
+  grant write to uniqueMember where value = self and not proxied  # realself
+Condition and capability stay separate; no NxM keyword explosion.
+
+- **23-form <who> field.** slapd's who field has ~23 combinable forms
+mixing three unrelated axes: authenticated identity (self, dn, users,
+anonymous), network origin (peername, sockname, domain, sockurl), and
+membership/set (group, dnattr, set, aci). One grammar, all
+interacting with accumulation and ordering.
+
+ldap4: the axes are separate concerns, not one field.
+- identity: who the authenticated principal is (or a group it belongs
+  to). The only thing that grants access.
+- network origin: a coarse pre-filter, optional, never a grant on its
+  own (see domain= trap).
+- membership/set: expressed as a predicate/query, not a who-keyword.
+No combinatorial who-soup.
+
+- **23-form <who> field.** slapd's who field has ~23 combinable forms
+  mixing three unrelated axes: authenticated identity (self, dn, users,
+  anonymous), network origin (peername, sockname, domain, sockurl), and
+  membership/set (group, dnattr, set, aci). One grammar, all
+  interacting with accumulation and ordering.
+
