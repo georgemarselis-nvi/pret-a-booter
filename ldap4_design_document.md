@@ -415,3 +415,36 @@ pattern to match. Where slapd used dn.regex:
   compatibility. Stored/displayed form is the readable infix; the
   prefix wire encoding is an implementation detail, not what the admin
   reads or writes.
+
+## Access privileges: no single-letter flags, no implicit levels
+
+slapd overloads two incompatible systems in one field:
+- levels (none, auth, read, write, manage) where each silently implies
+  all lower levels: `write` also grants read+search+compare+auth+disclose
+- single-letter privilege flags (m w a z i r s c x d) with =/+/- signs
+  that add, remove, or reset bits
+
+The result: `write` and `-w` look related but are a level-grant and a
+flag-subtraction, cryptic, and effective access requires simulating
+the evaluator.
+
+ldap4:
+
+- **Whole words only.** read, write, add, delete, search, compare,
+  authenticate, disclose, manage. No m/w/a/z/i/r/s/c/x/d.
+- **No implicit level pyramid.** Granting write grants write, not a
+  hidden bundle. Each capability is named explicitly. If an identity
+  needs read and write, the rule says read and write.
+- **Explicit verbs for change.** grant / revoke, not +/-/=. A rule
+  states the resulting capability set directly; there is no
+  accumulate-then-subtract arithmetic across clauses.
+
+  # instead of:  by uid=x +w   /   by uid=x -w   /   by uid=x =rscd
+  grant   read write   to uid=x
+  revoke  write        from uid=x
+  set     read compare to uid=x    # exact set, replaces prior
+
+- **Effective set is computed and shown, never hand-simulated.**
+  ldapctl acl explain <dn> <attr> <identity> prints the resolved
+  capability set in whole words. No mental evaluation of level
+  implication or flag arithmetic.
