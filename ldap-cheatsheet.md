@@ -271,6 +271,8 @@ access to dn.base="ou=People,dc=example,dc=com" attrs=children
   (attribute value is a DN below a base). Unrelated, same word. ldap4:
   rename so the two never share a token.
 
+val.children="ou=People,..." = match entries whose attribute value is a DN strictly below that base.
+attrs=children = permission over the child entries of the target.
 
 
 
