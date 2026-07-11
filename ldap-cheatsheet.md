@@ -537,3 +537,10 @@ No combinatorial who-soup.
   membership/set (group, dnattr, set, aci). One grammar, all
   interacting with accumulation and ordering.
 
+
+- **Proxy authorization (authz).** One identity authenticates (real DN),
+  operations run as another (authz DN), gated by authzTo/authzFrom.
+  Lets a service act on behalf of users without per-user binds. Risk: a
+  compromised proxy acts as anyone it may proxy. slapd adds real*
+  who-forms (realdn, realself, realusers, realanonymous) to match the
+  authentication DN, not the proxied one.
