@@ -345,16 +345,121 @@ ldapsearch -x -b cn=subschema -s base matchingRules
 ldapsearch -x -b cn=subschema -s base matchingRules  | grep -oE "NAME '[^']+'|[0-9.]+"
 
 
+## The by phrase: by <who> [<access>] [<control>]
+
+access to <what>
+        by <who> <access> <control>
+
+### <who> — which requester
+
+*                  everyone
+anonymous          unauthenticated clients (mostly for userPassword auth)
+users              any authenticated client
+self               the entry accessing its own record
+dn.<style>="..."   a specific DN (exact/base/one/subtree/children/regex)
+dnattr=<attr>      DN(s) named in that attribute of the target entry
+group="..."        members of a group entry
+peername="..."     client network address/name
+sockname="..."     server socket name
+domain="..."       client domain (see next section for traps)
+sockurl="..."      listener URL
+set="..."          set-expression match
+
+### <access> — level granted (each level implies all below it)
+
+manage    m   full control incl. schema-violating changes
+write     w   modify (= a + z + i)
+add       a   add a value/entry
+delete    z   delete a value/entry
+increment i   increment (numeric)
+read      r   read values
+search    s   apply in a search filter
+compare   c   compare a value
+auth      x   use for authentication (bind)
+disclose  d   allowed in error messages (vs. hidden)
+none      0   no access at all
+
+# level implication: write also grants read, search, compare, auth,
+# disclose. Grant a named level, or use privilege flags for exact sets.
+
+### <priv> — exact privilege flags (instead of a level)
+
+=<flags>   set access to exactly these flags (resets prior)
++<flags>   add these flags
+-<flags>   remove these flags
+flags: m w a z i r s c x d, or 0 for none
+
+# examples
+by * =rscd          exactly read+search+compare+disclose, nothing else
+by users +r         add read to whatever earlier clauses granted
+by self -w          remove write
+
+### <control> — flow after a match
+
+stop       (default) matching stops; decision is final
+continue   keep evaluating later by clauses in THIS rule
+           (privileges accumulate incrementally)
+break      stop this rule, jump to the next access-to rule
+
+# implicit terminator on every who-list:
+#   by * none stop
+
+### worked example (privilege accumulation with break)
+
+access to *
+        by dn.exact="cn=admin,dc=marsel,dc=is" write stop
+        by * break
+# admin gets write and evaluation stops; everyone else falls
+# through to the next rule instead of hitting the implicit deny.
 
 
+## ACL traps
 
+### Level implication is silent
+Granting a level grants every lower level too. `write` also gives read,
+search, compare, auth, disclose. For modify-without-read you MUST use
+privilege flags, not a level.
 
+  by <who> write        -> also readable by <who>
+  by <who> =wx          -> write + auth only, no read
 
+### disclose leaks existence
+Without `d`, a denied attribute/entry is invisible (client cannot tell
+it exists). Granting `d` reveals existence via error messages. Default
+hides; add `d` deliberately.
 
+### self is the accessor, not the target
+`self` matches when accessor DN == target DN. With proxy/group traversal
+it is still the accessor, not what you may assume. self.level{n} shifts
+which ancestor is compared: off-by-one prone.
 
+  self.level{1}   an ancestor of the accessor
+  self.level{-1}  an ancestor of the target
 
+### continue accumulates privileges
+With `continue`, later by-clauses in the same rule keep modifying the
+grant. Reading one clause in isolation does not give effective access;
+you must sum the chain.
 
+### = resets, + / - adjust
+`=flags` wipes accumulated privileges and sets exactly those. `+`/`-`
+add/remove from what earlier clauses granted. Mixing `=` and `+/-`
+across `continue` makes effective access non-obvious.
 
+  by * =r     exactly read, discards prior
+  by * +r     read added to prior
+  by * -w     write removed from prior
 
+### domain= is forgeable reverse-DNS
+by domain= / peername= match network identity via reverse DNS or IP,
+spoofable, and not authentication. Never a standalone grant.
 
+### first-match-wins hides later rules
+slapd stops at the first matching <what>. A broad early rule shadows
+narrower later ones. Rule ORDER is semantic; moving a rule changes
+authorization silently.
 
+### implicit terminator
+Every who-list ends with an implicit `by * none stop`. If your rule did
+not grant it, it is denied here, even if a later rule would have granted
+it (unless you used break).
