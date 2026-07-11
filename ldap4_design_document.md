@@ -394,3 +394,12 @@ pattern to match. Where slapd used dn.regex:
 
   Both expand visibly at write time: ldapctl resolves to a concrete
   attribute set and shows it before commit. Inheritance is never hidden.
+
+- **val= specifier (value-level ACL).** slapd restricts access by
+  attribute value via `attrs=X val="Y"`, with its own regex/subtree/
+  base/one/exact/children styles duplicating the dn scope grammar. The
+  capability is legitimate; the syntax is another scattered string
+  mini-language with duplicated scope keywords.
+  ldap4: value-level ACL is a structured predicate (attr, op, value)
+  set via ldapctl, same engine as attribute ACLs. No separate val
+  grammar, no duplicated scope styles.
