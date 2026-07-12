@@ -569,3 +569,21 @@ Range rules:
   connection is already cert-authenticated. Specifiers like domain= are
   available as coarse filters precisely because the global floor already
   guarantees a verified client. No cert, no connection: end of story.
+
+- **Authentication strength: global, with a capability cost for
+  lowering it.** Default and recommended: global maximal auth (TLS 1.3,
+  mandatory mutual client cert, every connection). This is the only
+  mode in which the full feature set is available, network specifiers
+  (domain=, peername=), sensitive-attribute access, write operations,
+  proxy authz, cross-realm.
+
+  Lowering the floor is possible but degrades capability, not just
+  security posture:
+  - no client cert  -> no domain=/peername= grants, no EXTERNAL, no
+    write, read limited to non-sensitive attributes
+  - weaker/older TLS -> refused outright (TLS 1.3 is the hard minimum)
+
+  The point: security is not a checkbox you disable for convenience.
+  Turn it down and the server visibly withholds the bells and whistles
+  that depend on knowing who you are. Capability is a function of
+  proven identity.
