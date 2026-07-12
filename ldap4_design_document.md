@@ -604,3 +604,11 @@ Range rules:
   as first-class, materialized relationships (membership, manager chain,
   ownership); the admin names the relationship, the engine walks it. No
   per-rule set math.
+
+- **No config file for the ACL/relationship engine.** slapd's ACLs live
+  in slapd.conf (or cn=config) and a reload/restart applies them. ldap4:
+  the engine ships preconfigured with the mandatory safe core; changes
+  are made online via ldapctl acl, applied live, no file to edit, no
+  server downtime. Rule writes recompute affected materialized scopes in
+  place. Config-file authorization is a leftover of static, restart-time
+  policy.
