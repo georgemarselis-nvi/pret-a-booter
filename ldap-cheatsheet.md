@@ -561,3 +561,80 @@ by group[/<objectClass>[/<attr>]]="<groupDN>" <access>
 
 # groupOfNames        -> member       (default)
 # groupOfUniqueNames  -> uniqueMember (must specify both)
+
+## by-phrase specifiers: styles + examples
+
+Each specifier takes a style suffix (.<style>) selecting how the value
+is matched. Network/connection specifiers are a coarse filter only,
+never a standalone grant (spoofable / not authentication).
+
+### peername  (client connection address)
+peername.ip="IP[%mask][:port]"    IPv4, optional mask + source port
+peername.ipv6="[::1]"             IPv6 literal
+peername.path="/var/run/ldapi"    ldapi socket path
+peername.exact="..."              exact match on the peer name
+peername.regex="..."              regex against the peer name
+# raw peer name forms: IP=10.0.0.5:1234  or  PATH=/var/run/ldapi
+
+by peername.ip="10.0.0.5" read
+by peername.ip="10.40.0.0%255.255.255.0" read      # /24 subnet
+by peername.path="/var/run/ldapi" write
+
+### sockname  (server listener socket name)
+sockname.exact="/var/run/ldapi"
+sockname.regex="..."
+
+by sockname.exact="/var/run/ldapi" write
+
+### domain    (client reverse-DNS hostname; forgeable)
+domain.exact="host.marsel.is"     exact hostname
+domain.subtree="marsel.is"        host and any subdomain
+domain.regex="..."                regex against the hostname
+
+by domain.exact="host.marsel.is" read
+by domain.subtree="marsel.is" read
+
+### sockurl   (listener URL the client connected to)
+sockurl.exact="ldap://ldap.marsel.is"
+sockurl.regex="..."
+
+by sockurl.exact="ldap://ldap.marsel.is" write
+
+### ssf family (numeric, no styles; comparison is >=)
+ssf=<n>              overall connection SSF
+transport_ssf=<n>    transport-layer SSF
+tls_ssf=<n>          TLS-layer SSF
+sasl_ssf=<n>         SASL-layer SSF
+
+by ssf=256 write
+by tls_ssf=256 read
+by sasl_ssf=256 read
+by transport_ssf=256 read
+# SSF values: 0 cleartext, 56/112 obsolete, 128 AES-128, 256 AES-256/TLS1.3
+
+### dn (who)  — same styles as access-to dn
+dn.exact  dn.base  dn.one  dn.subtree  dn.children  dn.regex
+
+by dn.exact="uid=barbara,ou=Users,dc=marsel,dc=is" write
+by dn.children="ou=System,dc=marsel,dc=is" read
+by dn.regex="uid=[^,]+,ou=Users,dc=marsel,dc=is" read
+
+### group (who)
+group="cn=...,ou=Groups,..."                       default OC/attr
+group/<objectClass>/<attr>="cn=..."                explicit OC + attr
+
+by group="cn=Admins,ou=Groups,dc=marsel,dc=is" write
+by group/groupOfUniqueNames/uniqueMember="cn=LDAP Admins,ou=Groups,dc=marsel,dc=is" write
+
+### dnattr (who: requester DN appears in target's attribute)
+by dnattr=uniqueMember write        # members can modify their own group
+
+### combined (AND: all specifiers in one clause must match)
+by peername.ip="10.40.0.0%255.255.255.0" ssf=256 write
+
+# every rule ends with an implicit: by * none
+
+Notes:
+- .exact = literal compare; .regex = POSIX ERE.
+- peername.ip mask uses % not / :  10.40.0.0%255.255.255.0
+- domain relies on reverse DNS; never use as a grant.
