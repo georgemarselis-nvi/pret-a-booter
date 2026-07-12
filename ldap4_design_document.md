@@ -587,3 +587,12 @@ Range rules:
   Turn it down and the server visibly withholds the bells and whistles
   that depend on knowing who you are. Capability is a function of
   proven identity.
+
+
+- **Relationships are first-class and precomputed.** ldap4 supports
+  relational queries (membership, manager chains, department joins,
+  group ownership) but does not make admins hand-write joins per rule.
+  Named relationships are materialized: resolved when the underlying
+  data changes, stored, and tested on the hot path as a lookup, not a
+  live join. Same model as materialized ACLs. Invalidation on
+  member/attribute change is the hard part (shared with the ACL engine).
