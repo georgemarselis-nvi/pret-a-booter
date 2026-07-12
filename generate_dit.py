@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-LDAP DIT generator for dc=marsel,dc=is — deterministic, seeded LDIF output.
+LDAP DIT generator — deterministic, seeded LDIF output for any base domain.
 
 Exercises the standard OpenLDAP schemas:
   core, cosine, inetorgperson, nis (posixAccount/shadowAccount/posixGroup),
@@ -12,24 +12,13 @@ Intended to produce test data for LDAP client/server implementations
 multi-valued attributes, binary values, SCRAM-SHA-256 userPassword).
 
 Usage:
-  ./generate_dit.py -o marsel.ldif
-  ./generate_dit.py --users 25000 --depts 20 --layout nested --seed v2
-  ./generate_dit.py --no-binary --no-special-dns --no-fold
+  ./generate_dit.py example.com
+  ./generate_dit.py                       # random (seeded) domain
+  ./generate_dit.py corp.example.org --users 25000 --layout nested --seed v2
+  ./generate_dit.py example.com --no-binary --no-special-dns --no-fold
 
 Load order matters: the file emits parents before children, so
-`ldapadd -f marsel.ldif` works directly.
-
-Additional notes:
-generate_dit.py (stdlib only, Python 3.9+). Run ./generate_dit.py -o marsel.ldif — defaults: 10k users, 12 depts, flat layout, everything on.
-
-Switches: --users, --depts, --layout flat|nested, --seed, --password; groups (--dept-groups, --posix-groups, --cross-groups, --roles); services (--services-standard, --services-additional); schema extras (--openldap-extras, --dua-profile); edge cases (--utf8, --long-values, --multivalued, --binary, --special-dns, --fold) — all with --no-* forms.
-
-Notes:
-
-SCRAM-SHA-256 hashes are real (RFC 7677 derivation) — one password across a pool of 24 salts so 10k users stay fast; all verify against --password.
-userCertificate values are DER-shaped placeholders, not valid certs.
-Requires kerberos.schema, duaconf.schema, misc.schema, and openldap.schema loaded (or drop the respective switches).
-Entries emit parents-first, so ldapadd -f marsel.ldif works directly.
+`ldapadd -f <domain>.ldif` works directly.
 """
 
 import argparse
@@ -42,8 +31,30 @@ import sys
 import time
 import unicodedata
 
-BASE = "dc=marsel,dc=is"
-REALM = "MARSEL.IS"
+# Filled in by main() from the domain argument (or a random domain).
+DOMAIN = "example.com"
+BASE = "dc=example,dc=com"
+REALM = "EXAMPLE.COM"
+ORG = "Example Industries"
+
+DOM_WORDS_A = ["north", "blue", "iron", "silver", "quantum", "polar",
+               "cedar", "granite", "lumen", "vertex", "echo", "atlas"]
+DOM_WORDS_B = ["forge", "labs", "works", "systems", "dynamics", "grid",
+               "stack", "cloud", "data", "logic", "net", "soft"]
+DOM_TLDS = ["com", "net", "org", "io", "dev", "is", "de", "co", "tech"]
+
+
+def random_domain(rng: "random.Random") -> str:
+    return (rng.choice(DOM_WORDS_A) + rng.choice(DOM_WORDS_B) + "." +
+            rng.choice(DOM_TLDS))
+
+
+def set_domain(domain: str):
+    global DOMAIN, BASE, REALM, ORG
+    DOMAIN = domain.lower().strip(".")
+    BASE = ",".join("dc=" + p for p in DOMAIN.split("."))
+    REALM = DOMAIN.upper()
+    ORG = DOMAIN.split(".")[0].capitalize() + " Industries"
 
 # --------------------------------------------------------------------------
 # data
@@ -165,7 +176,7 @@ CROSS_GROUPS = [
 ]
 
 LOREM = (
-    "The directory information tree at marsel.is exists primarily to "
+    "The directory information tree exists primarily to "
     "exercise every corner of the LDAP protocol implementation under test, "
     "including attribute options, matching rules, syntaxes, and transfer "
     "encodings. "
@@ -313,17 +324,17 @@ def generate(cfg) -> LdifWriter:
         w.a("objectClass", oc)
     if cfg.openldap_extras:
         w.a("objectClass", "OpenLDAPorg")
-    w.a("dc", "marsel")
-    w.a("o", "Marsel Industries")
-    w.a("o", "marsel.is")
-    w.a("description", "Test directory for the marsel.is realm")
+    w.a("dc", DOMAIN.split(".")[0])
+    w.a("o", ORG)
+    w.a("o", DOMAIN)
+    w.a("description", f"Test directory for the {DOMAIN} realm")
     w.a("l", "Reykjavík")
     w.a("postalCode", "101")
     w.a("telephoneNumber", "+354 555 0100")
     w.a("facsimileTelephoneNumber", "+354 555 0101")
     if cfg.openldap_extras:
-        w.a("displayName", "Marsel Industries hf.")
-        w.a("labeledURI", "https://marsel.is")
+        w.a("displayName", ORG)
+        w.a("labeledURI", "https://" + DOMAIN)
     w.end()
 
     w.dn(admin_dn)
@@ -376,7 +387,7 @@ def generate(cfg) -> LdifWriter:
         w.a("postOfficeBox", f"PO {rng.randint(1000, 9999)}")
         w.a("physicalDeliveryOfficeName", "Building " + rng.choice("ABC"))
         if cfg.openldap_extras:
-            w.a("displayName", "marsel.is / " + d["name"])
+            w.a("displayName", DOMAIN + " / " + d["name"])
         w.end()
         if cfg.layout == "nested":
             w.dn(f"ou=people,{d['dn']}")
@@ -423,25 +434,25 @@ def generate(cfg) -> LdifWriter:
         w.a("displayName", cn_native or cn)
         w.a("initials", (to_ascii(gn)[:1] or "X").upper() + "." +
             (to_ascii(sn)[:1] or "X").upper() + ".")
-        w.a("mail", uid + "@marsel.is")
+        w.a("mail", f"{uid}@{DOMAIN}")
         if cfg.multivalued:
             alias = (re.sub(r"[^a-z]", "", to_ascii(gn).lower()) + "." +
                      re.sub(r"[^a-z]", "", to_ascii(sn).lower()))
-            w.a("mail", alias + "@marsel.is")
+            w.a("mail", f"{alias}@{DOMAIN}")
             if rng.random() < 0.3:
-                w.a("mail", uid + "@corp.marsel.is")
+                w.a("mail", f"{uid}@corp.{DOMAIN}")
         if cfg.openldap_extras:
             mh = rng.choice(MAILHOSTS)
-            w.a("mailLocalAddress", uid + "@marsel.is")
-            w.a("mailRoutingAddress", f"{uid}@{mh}.marsel.is")
-            w.a("mailHost", mh + ".marsel.is")
+            w.a("mailLocalAddress", f"{uid}@{DOMAIN}")
+            w.a("mailRoutingAddress", f"{uid}@{mh}.{DOMAIN}")
+            w.a("mailHost", f"{mh}.{DOMAIN}")
         w.a("employeeNumber", str(100000 + i))
         w.a("employeeType", "permanent" if rng.random() < 0.9 else
             rng.choice(["contractor", "intern", "temporary"]))
         w.a("title", rng.choice(TITLES))
         w.a("departmentNumber", str(d["gid"]))
         w.a("ou", d["name"])
-        w.a("o", "Marsel Industries")
+        w.a("o", ORG)
         w.a("telephoneNumber", f"+354 5{rng.randint(100000, 999999)}")
         if cfg.multivalued and rng.random() < 0.4:
             w.a("telephoneNumber", f"+354 5{rng.randint(100000, 999999)}")
@@ -467,7 +478,7 @@ def generate(cfg) -> LdifWriter:
                 f"{rng.choice(CITIES)}$Iceland")
         w.a("physicalDeliveryOfficeName", "Building " + rng.choice("ABC"))
         w.a("preferredLanguage", rng.choice(LANGS))
-        w.a("labeledURI", f"https://intranet.marsel.is/~{uid} Intranet page")
+        w.a("labeledURI", f"https://intranet.{DOMAIN}/~{uid} Intranet page")
         if rng.random() < 0.25:
             w.a("carLicense", rng.choice(["AB", "GK", "MX", "RE", "TF"]) +
                 "-" + rng.choice("ABDE") + str(rng.randint(10, 99)))
@@ -594,7 +605,7 @@ def generate(cfg) -> LdifWriter:
     # ---- hosts + services --------------------------------------------------
     if cfg.services_standard or cfg.services_additional:
         for h, ip in HOSTS:
-            fqdn = h + ".marsel.is"
+            fqdn = h + "." + DOMAIN
             w.dn(f"cn={h},ou=hosts,{BASE}")
             for oc in ["top", "device", "ipHost", "krbPrincipalAux"]:
                 w.a("objectClass", oc)
@@ -611,7 +622,7 @@ def generate(cfg) -> LdifWriter:
     svc_list = ((STD_SERVICES if cfg.services_standard else []) +
                 (ADD_SERVICES if cfg.services_additional else []))
     for n, (svc, host) in enumerate(svc_list):
-        principal = (f"{svc}/{host}.marsel.is@{REALM}" if host
+        principal = (f"{svc}/{host}.{DOMAIN}@{REALM}" if host
                      else f"{svc}@{REALM}")
         uid = "svc-" + re.sub(r"[^a-z0-9]+", "-", svc.lower()) + \
             (f"-{host}" if host else "")
@@ -621,7 +632,7 @@ def generate(cfg) -> LdifWriter:
             w.a("objectClass", oc)
         w.a("uid", uid)
         if host:
-            w.a("host", host + ".marsel.is")
+            w.a("host", host + "." + DOMAIN)
         w.a("krbPrincipalName", principal)
         w.a("krbCanonicalName", principal)
         w.a("description", "Service principal " + principal)
@@ -634,8 +645,8 @@ def generate(cfg) -> LdifWriter:
         w.a("objectClass", "top")
         w.a("objectClass", "DUAConfigProfile")
         w.a("cn", "default")
-        w.a("defaultServerList", "ldap01.marsel.is ldap02.marsel.is")
-        w.a("preferredServerList", "ldap01.marsel.is")
+        w.a("defaultServerList", f"ldap01.{DOMAIN} ldap02.{DOMAIN}")
+        w.a("preferredServerList", f"ldap01.{DOMAIN}")
         w.a("defaultSearchBase", BASE)
         w.a("defaultSearchScope", "sub")
         w.a("authenticationMethod", "sasl/GSSAPI")
@@ -685,13 +696,17 @@ def longtext(rng: random.Random) -> str:
 
 def main():
     p = argparse.ArgumentParser(
-        description="Generate a deterministic test LDIF for dc=marsel,dc=is",
+        description="Generate a deterministic test LDIF for a base domain",
         formatter_class=argparse.ArgumentDefaultsHelpFormatter)
     B = argparse.BooleanOptionalAction
 
-    p.add_argument("-o", "--output", default="marsel.ldif",
-                   help="output file ('-' for stdout)")
-    p.add_argument("--seed", default="marsel", help="RNG seed")
+    p.add_argument("domain", nargs="?", default=None,
+                   help="base domain, e.g. example.com "
+                        "(random, seed-derived, if omitted)")
+    p.add_argument("-o", "--output", default=None,
+                   help="output file ('-' for stdout; "
+                        "default: <domain-label>.ldif)")
+    p.add_argument("--seed", default="ldap4", help="RNG seed")
     p.add_argument("--users", type=int, default=10000, help="number of users")
     p.add_argument("--depts", type=int, default=12,
                    help="number of departments")
@@ -740,6 +755,9 @@ def main():
                    help="RFC 2849 line folding at 76 chars")
 
     cfg = p.parse_args()
+    set_domain(cfg.domain or random_domain(random.Random(cfg.seed + "-domain")))
+    if cfg.output is None:
+        cfg.output = DOMAIN.split(".")[0] + ".ldif"
     t0 = time.time()
     w = generate(cfg)
     out = "\n".join(w.lines) + "\n"
