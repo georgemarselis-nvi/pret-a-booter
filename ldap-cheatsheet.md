@@ -581,6 +581,10 @@ by peername.ip="10.40.0.0%255.255.255.0" read      # /24 subnet
 by peername.path="/var/run/ldapi" write
 by peername.regex="^IP=(10\.10\.10\.10|1\.1\.1\.1):[0-9]+$" read
 
+# peername.regex matches the RAW string "IP=<addr>:<port>"
+# must include IP= prefix and :port, or it never matches
+by peername.regex="^IP=10\.40\.12[0-9]:[0-9]+$" read
+
 ### sockname  (server listener socket name)
 sockname.exact="/var/run/ldapi"
 sockname.regex="..."
