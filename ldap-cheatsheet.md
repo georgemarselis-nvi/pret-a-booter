@@ -643,3 +643,11 @@ Notes:
 - .exact = literal compare; .regex = POSIX ERE.
 - peername.ip mask uses % not / :  10.40.0.0%255.255.255.0
 - domain relies on reverse DNS; never use as a grant.
+
+- **domain= matches the reverse-DNS canonical (A-record) name, not the
+  CNAME.** slapd reverse-resolves the client IP; PTR returns the
+  A-record host (mercury.example.com), never the CNAME alias
+  (ldap.example.com). An ACL written against the alias silently never
+  matches. Yet another reason network-name specifiers are unfit as
+  grants. ldap4: no domain=; identity comes from authentication, not
+  DNS names.
