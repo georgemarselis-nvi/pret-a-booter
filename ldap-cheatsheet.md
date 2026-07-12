@@ -658,3 +658,11 @@ Notes:
   a cert" cannot be enforced where domain= is used, only server-wide.
   ldap4: authentication strength is expressible ~~per-target in the same
   rule system, not split between global config and ACLs.~~global
+
+- **set= is set-algebra as an ACL escape hatch.** When group/dnattr
+  cannot express a relationship, slapd offers set= : a full
+  set-theoretic language (intersection &, union |, DN/attribute
+  traversal) written inline per rule. Powerful, opaque, overkill for
+  the 99% case ("is X a member of Y"). ldap4: relationships
+  (membership, ownership, delegation) are first-class, server-resolved
+  predicates, not hand-written set math. No set= mini-language.
