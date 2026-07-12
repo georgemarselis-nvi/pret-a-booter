@@ -612,3 +612,10 @@ Range rules:
   server downtime. Rule writes recompute affected materialized scopes in
   place. Config-file authorization is a leftover of static, restart-time
   policy.
+
+- **set= is undocumented and dropped.** slapd's own slapd.access man
+  page does not document set=; the only reference is an OpenLDAP FAQ
+  page. A feature too obscure to document but complex enough to need its
+  own article. ldap4: no set=. Everything it did (membership, same-OU,
+  attribute existence/value, relationship traversal) is covered by
+  first-class materialized relationships and predicates.
