@@ -596,3 +596,11 @@ Range rules:
   data changes, stored, and tested on the hot path as a lookup, not a
   live join. Same model as materialized ACLs. Invalidation on
   member/attribute change is the hard part (shared with the ACL engine).
+
+- **Relationship traversal belongs in the engine, not ACL syntax.**
+  set= exposes DN/attribute traversal (this/ou, manager chains) as an
+  inline set-algebra language the admin hand-writes per rule. These are
+  directory relationships the server already holds. ldap4 resolves them
+  as first-class, materialized relationships (membership, manager chain,
+  ownership); the admin names the relationship, the engine walks it. No
+  per-rule set math.
