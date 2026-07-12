@@ -548,3 +548,13 @@ Range rules:
   - any wider range uses full form: 10.10.1.0-10.10.2.255
   - validated and normalized at write time; start <= end enforced
 
+- **domain= (strict, ldap4-retained).**
+  - Write/lint time: reject CNAME values. ldapctl acl lint resolves the
+    domain= value; if it is a CNAME, error and name the canonical
+    A-record target. Rule must use the A-record name.
+  - Request time: forward-confirmed reverse DNS (FCrDNS). Reverse-resolve
+    client IP to PTR, forward-resolve PTR back, require match. On
+    mismatch, deny and log loudly:
+    "domain= rejected: PTR <name> does not forward-confirm to <ip>".
+  - Still never a standalone grant: layered under authentication. A
+    confirmed hostname is still not an identity.
