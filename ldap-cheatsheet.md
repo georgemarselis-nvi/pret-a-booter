@@ -579,6 +579,7 @@ peername.regex="..."              regex against the peer name
 by peername.ip="10.0.0.5" read
 by peername.ip="10.40.0.0%255.255.255.0" read      # /24 subnet
 by peername.path="/var/run/ldapi" write
+by peername.regex="^IP=(10\.10\.10\.10|1\.1\.1\.1):[0-9]+$" read
 
 ### sockname  (server listener socket name)
 sockname.exact="/var/run/ldapi"
