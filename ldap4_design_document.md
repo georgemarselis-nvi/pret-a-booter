@@ -535,3 +535,16 @@ interpretation. Components:
   - No %mask vs /prefix inconsistency: CIDR /prefix only.
   - No regex-on-stringified-IP. If you need a set, you list the set.
   - Remains a coarse pre-filter under authentication, never a grant.
+
+ldap4 network match accepts, in one list:
+    - single address:   10.10.10.10
+    - CIDR:             10.40.0.0/24
+    - inclusive range:  10.10.10.1-100   (last octet) or
+                        10.10.10.1-10.10.10.100  (full form)
+  e.g.  from 10.10.10.10, 10.40.0.0/24, 10.10.10.1-100
+
+Range rules:
+  - short form varies the LAST octet only: 10.10.10.1-100
+  - any wider range uses full form: 10.10.1.0-10.10.2.255
+  - validated and normalized at write time; start <= end enforced
+
