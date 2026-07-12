@@ -505,3 +505,19 @@ ldap4:
     schema-aware instead of making every ACL respell it.
 
 
+## Access control engine
+
+ldap4 authorization is a defined subsystem, not per-rule config
+interpretation. Components:
+
+- Rule store: ACLs are DIT entries, managed via ldapctl acl.
+- Compiler: on rule write, evaluates the full rule set (deny-wins,
+  recursive) into a materialized effective-permission set per
+  (identity, scope). No first-match, no ordering.
+- Hot path: request-time check is a bitmask AND against the
+  materialized set. No rule walk.
+- Invalidation: rule/group/entry changes recompute affected scopes.
+- Introspection: explain (why this decision) and lint (dead/shadowed
+  rules) are first-class operations.
+- Inputs are identity and group (schema-resolved); network origin is a
+  coarse pre-filter, never a standalone grant.
