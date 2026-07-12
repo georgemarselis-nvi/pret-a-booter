@@ -651,3 +651,10 @@ Notes:
   matches. Yet another reason network-name specifiers are unfit as
   grants. ldap4: no domain=; identity comes from authentication, not
   DNS names.
+
+- **Client-cert requirement is global, not per-ACL.** slapd cannot
+  require a client cert for a specific target via ACL; TLSVerifyClient
+  demand is a global slapd.conf directive. So "domain= is only safe with
+  a cert" cannot be enforced where domain= is used, only server-wide.
+  ldap4: authentication strength is expressible ~~per-target in the same
+  rule system, not split between global config and ACLs.~~global
