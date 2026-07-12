@@ -558,3 +558,14 @@ Range rules:
     "domain= rejected: PTR <name> does not forward-confirm to <ip>".
   - Still never a standalone grant: layered under authentication. A
     confirmed hostname is still not an identity.
+
+- **Authentication strength is global and maximal, not per-rule.** slapd
+  splits this: TLSVerifyClient is global, ACLs cannot require a cert per
+  target, and network specifiers (domain=, peername=) are offered
+  without any auth guarantee behind them. ldap4 inverts it: the auth
+  floor is global, mandatory, and maxed (TLS 1.3, mutual client cert
+  required for every connection, no exceptions). There is no per-target
+  auth-strength setting because there is nothing to tune: every
+  connection is already cert-authenticated. Specifiers like domain= are
+  available as coarse filters precisely because the global floor already
+  guarantees a verified client. No cert, no connection: end of story.
