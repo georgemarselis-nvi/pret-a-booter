@@ -521,3 +521,17 @@ interpretation. Components:
   rules) are first-class operations.
 - Inputs are identity and group (schema-resolved); network origin is a
   coarse pre-filter, never a standalone grant.
+
+- **peername.ip takes one address; sets require regex.** slapd's ip
+  style parses a single IP + optional %mask + :port, no list separator.
+  Matching an arbitrary set of addresses forces peername.regex against
+  the raw "IP=addr:port" string, i.e. pattern-matching a stringified
+  address, fragile and opaque.
+
+  ldap4: network match is a first-class list of CIDRs (and optional
+  port constraints), not a string regex.
+    from 10.10.10.10, 1.1.1.1, 10.40.0.0/24
+  - Values are structured CIDRs, validated at write time.
+  - No %mask vs /prefix inconsistency: CIDR /prefix only.
+  - No regex-on-stringified-IP. If you need a set, you list the set.
+  - Remains a coarse pre-filter under authentication, never a grant.
