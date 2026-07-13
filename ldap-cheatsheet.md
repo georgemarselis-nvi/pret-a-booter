@@ -703,3 +703,31 @@ Notes:
 - evaluated first match wins, order matters (like ACLs)
 - timer starts at execution, not arrival: queue wait not counted
 - global sizelimit/timelimit still apply to anyone not matched
+
+
+## restrict directive (database or global section)
+
+Disallows listed operations. The nine known:
+
+    restrict add | bind | compare | delete | modify | rename
+             | search | read | write
+
+- `read`: pseudonym for search + compare + bind
+- `write`: pseudonym for all core write ops, equals `readonly on`
+- `restrict extended=<OID>`: blocks one extended operation by OID
+
+Traps:
+
+- `readonly on` and `restrict write` gate only the core write
+  opcodes. Extended operations bypass both: Password Modify
+  (1.3.6.1.4.1.4203.1.11.1) changes passwords on a "read-only"
+  server unless its OID is explicitly restricted
+- The read/write pseudonyms cannot cover extended ops: an OID
+  identifies the operation, not its semantics; nothing on the wire
+  says whether an extended op reads or writes. Write-proofing
+  slapd means enumerating every write-capable OID yourself:
+  blocklist plus folklore
+- Relevant OIDs to restrict on a read-only replica:
+      1.3.6.1.4.1.4203.1.11.1   Password Modify (RFC 3062)
+      1.3.6.1.4.1.4203.1.11.3   WhoAmI (harmless, read)
+  Check rootDSE supportedExtension for what your build ships
