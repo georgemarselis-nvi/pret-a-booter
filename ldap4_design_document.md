@@ -619,3 +619,60 @@ Range rules:
   own article. ldap4: no set=. Everything it did (membership, same-OU,
   attribute existence/value, relationship traversal) is covered by
   first-class materialized relationships and predicates.
+
+## Design note: scale-out provisions in a single-org core
+
+ldap4 v1 targets a single organization of roughly 1000 people: one
+suffix, one storage unit, one replication policy. Behemoth-scale
+features (multi-tenancy, sharding, per-tree replication) are out of
+scope for v1 but must remain reachable without redesign. Two
+provisions are load-bearing and must be in the core now; everything
+else is additive later.
+
+### 1. Namespace/database decoupling
+
+The mapping from DIT subtree to storage unit is a first-class
+concept in the data model and config schema, even though v1 ships
+with exactly one storage unit.
+
+Rationale: multi-tenancy, delegated administration boundaries and
+per-tree replication policies all hang off this abstraction. If ACL
+materialization, config schema or tooling assume a single global
+tree, that assumption spreads through every subsystem and cannot be
+removed later.
+
+Rule: no component may assume suffix == server == storage unit.
+Components address a named storage unit; the resolver maps subtree
+to storage unit. v1 ships with a resolver that always returns the
+single unit.
+
+### 2. Replication metadata reserved from day one
+
+Replication itself is not implemented in v1, but the data model
+records what any future sync mechanism needs:
+
+- per-entry change sequence value (CSN equivalent)
+- per-storage-unit high-water mark (context sequence)
+
+Rationale: bolting change tracking onto a store that never recorded
+it is the retrofit that hurts. OpenLDAP carries the scars: entryCSN
+and contextCSN were grafted on after the fact. Recording sequence
+metadata is cheap at write time and impossible to reconstruct
+retroactively.
+
+### Explicitly deferred (safe because 1 and 2 exist)
+
+- proxy and meta backends
+- per-tree overlay stacks
+- horizontal sharding
+- multi-provider replication topologies
+
+These are additive: they consume the subtree-to-storage-unit
+resolver and the change sequence metadata but require no changes to
+either.
+
+### Principle
+
+Opinionated mandatory core with extension points. The extension
+points above are load-bearing walls placed at construction time,
+not doors cut into concrete later.
