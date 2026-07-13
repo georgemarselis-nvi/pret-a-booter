@@ -1263,3 +1263,27 @@ Queue-wait percentile panels are the saturation indicator.
 Clients needing a true end-to-end deadline enforce it client-side;
 the requested-limit field bounds execution only.
 
+
+## Design note: read-only is storage state, no privileged opcodes
+
+### Read-only
+
+Read-only is a property of the storage unit, enforced at the write
+path, not an operation-level gate. Any operation reaching the
+write path of a read-only unit fails, regardless of opcode.
+OpenLDAP's readonly directive gates the modify operation while the
+Password Modify extended operation walks past it (book, p235):
+an operation-level gate protecting a data-level invariant. ldap4
+does not reproduce the pattern.
+
+### No extended operations
+
+LDAPv3 extended operations (OID-addressed opaque payloads) are
+removed. Their failure mode was not extensibility but bypass:
+extensions arrived as blobs outside the semantics the core
+enforces. ldap4 rule: every operation goes through the same
+pipeline: authentication, ACL evaluation, limits, write path,
+replication metadata. No opcode is special. Operations that
+LDAPv3 shipped as extensions and ldap4 actually needs (whoami,
+cancel) are core operations. New operations arrive only by
+protocol version, never by side channel.
