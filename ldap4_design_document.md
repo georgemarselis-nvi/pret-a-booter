@@ -1044,3 +1044,28 @@ window: review the LDIF, diff it, commit it to a repo, apply cold.
 The UI is tooling, not architecture. The architectural commitment
 is only: plan artifacts are renderable and editable offline, and
 apply is artifact-driven with source-hash guards.
+
+### Addendum: tenant provisioning is a privileged, atomic action
+
+OpenLDAP inherits a layering gap: slapd runs unprivileged by
+design, so it cannot create its own database directories, set
+ownership or apply SELinux contexts. Packagers cover the first
+database; every additional database is manual mkdir, chown and
+restorecon, and the failure mode on a wrong-permission directory
+is a startup error at best.
+
+ldap4 resolves this structurally. `ldap4ctl tenant create` is a
+privileged orchestration action, distinct from the unprivileged
+ldap4d runtime, and provisions in one atomic step:
+
+- storage directory with correct ownership and mode
+- SELinux fcontext and the tenant's MCS category
+- systemd instantiated unit (`ldap4d@<tenant>.service`) with
+  cgroup quotas
+- tenant slice for uidNumber/gidNumber allocation
+- initial storage unit and administrative identity
+
+Either the tenant is fully provisioned or nothing was created.
+The daemon never needs privilege; privilege lives only in the
+provisioning path, where it belongs. No tenant ever starts on a
+half-prepared filesystem.
