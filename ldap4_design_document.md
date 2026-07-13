@@ -1121,4 +1121,5 @@ If an operator reaches for offline import to work around online
 speed, that is a performance bug in the online path, not a
 workflow. One tool per trust boundary: ldapctl speaks protocol to
 the living; ldapimport touches files of the dead.
-</markdown>
+
+
