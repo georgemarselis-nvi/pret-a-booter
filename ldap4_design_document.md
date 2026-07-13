@@ -1220,3 +1220,28 @@ indefinitely.
 ACLs need no equivalent seam: materialized deny-wins evaluation
 with precomputed bitmasks is already an ahead-of-time plan, with
 acl explain and acl lint as its inspection surface.
+
+### Addendum: planner as sensor
+
+Planner classifications and limit events are exported as labeled
+metrics (Prometheus format): operation counts by class, identity,
+tenant; rate-budget consumption; breach events. The metrics
+endpoint is a named, authenticated consumer like any other.
+
+Three uses fall out of one classification stream:
+
+1. Indexing error detection: recurring scan-class filters on the
+   same attribute indicate a missing index. The planner aggregates
+   and recommends: "attribute department caused 40k scans this
+   week; add eq index." acl lint philosophy applied to indexing.
+2. Baseline deviation: rolling averages per identity, tenant and
+   class; alert on departure. Granularity is label depth.
+3. Capacity truth: class mix over time shows what the workload
+   actually is versus what was indexed for.
+
+The planner is not just an execution step; it is the sensor that
+makes indexing empirical. Third instance of the evidence-over-
+guesswork pattern, after observed-minimum ACLs and bridge audit
+mode.
+
+
