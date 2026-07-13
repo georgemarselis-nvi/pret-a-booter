@@ -698,3 +698,96 @@ admin surface: delegation boundaries, ldapctl addressing, ACL
 materialization scope, export/import units. It is API design.
 Internals behind the resolver stay swappable; without the resolver
 the single-tree assumption becomes protocol-visible and permanent.
+
+
+## Design note: anonymous-bind bridge for legacy applications
+
+### Problem
+
+ldap4 mandates authenticated access: anonymous bind is off by
+default and the global-maximal-auth-floor rule requires proven
+identity for every capability. Some legacy applications cannot
+authenticate: they speak LDAP but only support anonymous binds and
+cannot be patched. The common workaround, enabling anonymous access
+server-wide for one application's benefit, destroys the auth floor
+for everyone.
+
+### Solution
+
+A per-application bridge process: `ldap4-bridge`. One instance per
+legacy application, never shared.
+
+- Invocation: `ldap4-bridge --app <name> --conf
+  /etc/ldap4/bridges/<name>.conf`
+- Listens only where the target application can reach it: an
+  `ldapi://` socket guarded by filesystem permissions, or a
+  localhost port confined by network namespace
+- Accepts the application's anonymous bind locally
+- Forwards all operations upstream authenticated as a dedicated
+  service identity: `cn=bridge-<name>,ou=services,...`
+- The service identity is a real DIT entry subject to schema
+  validation, per the existing rule that any DN used for
+  authentication must exist in the DIT
+- Upstream credential is a client certificate issued by the
+  internal CA (step-ca phase); no passwords on disk
+- ACLs on the service identity grant exactly the read scope the
+  application requires and nothing else
+
+### Properties
+
+- The server never sees an anonymous bind. Anonymity terminates at
+  the shim.
+- Blast radius of each legacy application is its bridge identity's
+  ACL scope.
+- Every exception to the auth floor is enumerated, named and
+  auditable: one bridge, one config file, one service DN per
+  application. No blanket "allow anon because one app needs it".
+- Removing a legacy application means deleting one bridge and one
+  DIT entry.
+
+### Non-goals
+
+- The bridge is not a general proxy, load balancer or protocol
+  translator. One app, one identity, read-scoped.
+- The bridge does not attempt to add authentication to the legacy
+  application. It contains the damage; it does not fix the app.
+
+### Precedent
+
+Equivalent to a dedicated slapd instance running back-ldap with
+idassert-bind, or stunnel abuse patterns in the wild. ldap4 makes
+the workaround a first-class, opinionated escape hatch instead of
+an undocumented hack.
+
+### Addendum: per-app credential and observed-minimum ACLs
+
+**Credential naming.** The bridge's upstream client certificate is
+issued to the application's identity and no other: subject bound to
+`cn=bridge-<name>,ou=services,...`, one certificate per bridge, no
+sharing and no wildcard service credentials. Revoking the
+certificate kills exactly one application's access.
+
+**Audit mode.** The bridge records every operation the application
+performs: operation type, search base, scope, filter attributes,
+requested attributes, written attributes. Because the bridge is the
+application's only path to the directory, the recorded set is
+complete by construction.
+
+**Observed-minimum ACLs.** From the audit log the bridge emits the
+minimal ACL covering observed behavior:
+`ldap4-bridge --app <name> --emit-acl`. Deployment lifecycle:
+
+1. New bridge starts in observe mode: permissive scope, full
+   recording
+2. After a representative period, emit the observed-minimum ACL
+3. Apply it and switch the bridge to enforce mode
+4. Anything outside the observed set is thereafter denied and
+   logged, which either catches the application misbehaving or
+   flags a legitimate new need for explicit review
+
+Least privilege is derived from evidence, not guessed from vendor
+documentation. The audit log is also the migration artifact: when
+the legacy application is finally replaced, the log states exactly
+what its successor must be able to do.
+
+
