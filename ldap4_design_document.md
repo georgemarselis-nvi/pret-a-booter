@@ -1192,3 +1192,31 @@ server ceiling, never higher. ldap4's own clients (ldapctl,
 libldap4) send no requested limit by default: the server ceiling
 applies. The flag exists, documented in the man page, for callers
 with a real deadline. Dumb by default, expressive when needed.
+
+## Design note: filter planner seam
+
+Filter execution sits behind a planner interface from v1. The seam
+is between parse and execute; nothing else may call execution
+directly.
+
+v1 planner is deliberately dumb: walk the filter, check index
+availability per term, order terms naively, and classify the query
+as indexed, partial or full-scan. No cost model.
+
+The classification is the immediate payoff:
+
+- rate-limit weighting: scan-class operations consume more of an
+  identity's budget than indexed point lookups
+- audit signal: an identity whose baseline is indexed lookups
+  suddenly issuing scan-class filters is flagged
+- `ldapctl explain <filter>`: shows the classification and which
+  terms lack index support, mirroring acl explain
+
+Cost-based planning, if ever justified, replaces the planner
+behind the same interface. Directory workloads are read-heavy
+point lookups; the expectation is that classification-only lasts
+indefinitely.
+
+ACLs need no equivalent seam: materialized deny-wins evaluation
+with precomputed bitmasks is already an ahead-of-time plan, with
+acl explain and acl lint as its inspection surface.
