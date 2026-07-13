@@ -1069,3 +1069,56 @@ Either the tenant is fully provisioned or nothing was created.
 The daemon never needs privilege; privilege lives only in the
 provisioning path, where it belongs. No tenant ever starts on a
 half-prepared filesystem.
+
+## Design note: bulk loading, online-first
+
+### Principle
+
+The online path must be fast enough that offline import is only
+for disaster recovery. Slow online adds are a protocol-era
+artifact, not physics: one synchronous round-trip and one
+fsync-backed transaction per entry is what makes ldapadd take
+hours. Full validation costs microseconds per entry; transaction
+granularity is what costs hours.
+
+### Online bulk: ldapctl add --bulk
+
+Streams LDIF through the live ldap4d instance:
+
+- entries grouped thousands per transaction instead of one
+  transaction per entry
+- full stack retained: schema validation, ACL evaluation,
+  materialized constraint checks. Nothing is bypassed
+- index maintenance deferred and built at end of stream where the
+  storage engine allows it
+- target: within small constant factor of offline import speed
+
+This is the normal path for mass imports, without exception, on
+any running system.
+
+### Offline import: ldapimport
+
+ldapimport is a recovery and provisioning tool; it is not an
+import path for running systems. It exists for exactly two cases,
+both defined by the absence of a live server:
+
+- disaster recovery: the storage unit is corrupted or the instance
+  cannot start; restore happens against dead files
+- initial provisioning: `tenant create` lays down a storage unit
+  before its ldap4d instance has ever existed
+
+Guard: ldapimport takes an exclusive flock on the storage unit and
+refuses to run if the unit's ldap4d instance is running (and vice
+versa: ldap4d takes the lock at startup). The OpenLDAP failure
+mode, where slapadd against a live database silently corrupts it
+and the warning lives in documentation prose, is structurally
+impossible. Refusal is a hard error with a human-readable reason,
+per the error-strings principle.
+
+### Rule
+
+If an operator reaches for offline import to work around online
+speed, that is a performance bug in the online path, not a
+workflow. One tool per trust boundary: ldapctl speaks protocol to
+the living; ldapimport touches files of the dead.
+</markdown>
