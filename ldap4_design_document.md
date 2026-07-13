@@ -676,3 +676,25 @@ either.
 Opinionated mandatory core with extension points. The extension
 points above are load-bearing walls placed at construction time,
 not doors cut into concrete later.
+
+### Addendum: replication is an adopted problem, not a designed one
+
+Replication mechanics are a solved problem. ldap4 will not design
+consensus, conflict resolution or sync protocols. When replication
+lands, it adopts an existing model: Raft or equivalent for the
+config plane, eventual consistency with CSN-based last-writer-wins
+for entry data, or whatever the state of the art is at
+implementation time.
+
+The reservation in provision 2 exists solely to keep that adoption
+possible. Every off-the-shelf replication model consumes per-entry
+change sequence metadata; none can reconstruct it from a store that
+never recorded it. ldap4 records the metadata now and defers the
+mechanism entirely.
+
+Clarification on provision 1: the subtree-to-storage-unit resolver
+is not server internals. The mapping leaks into the protocol and
+admin surface: delegation boundaries, ldapctl addressing, ACL
+materialization scope, export/import units. It is API design.
+Internals behind the resolver stay swappable; without the resolver
+the single-tree assumption becomes protocol-visible and permanent.
