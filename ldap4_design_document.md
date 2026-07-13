@@ -1184,3 +1184,11 @@ philosophy as the bridge audit mode.
 Refusals are polite and typed: busy/rate-exceeded result with a
 human-readable reason and, where sane, a retry-after hint. Clients
 under limit never queue behind clients over it.
+
+### Addendum: client-side default for requested limits
+
+The protocol allows clients to request limits lower than the
+server ceiling, never higher. ldap4's own clients (ldapctl,
+libldap4) send no requested limit by default: the server ceiling
+applies. The flag exists, documented in the man page, for callers
+with a real deadline. Dumb by default, expressive when needed.
