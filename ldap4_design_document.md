@@ -996,3 +996,51 @@ since the plan was generated (plan carries content hashes).
 The workflow is a merge request for directories: diff, review,
 resolve, apply. Same reason git refuses to merge with unresolved
 conflicts.
+
+## Design note: interactive reconciliation, frozen artifact
+
+Extends the merge preflight note. Applies to both tenant merges and
+legacy imports (ldapimport reconciliation): same pipeline, two
+customers.
+
+### Principle
+
+Interactivity belongs on the read-only side of the wall. The
+interactive session produces a dead artifact; the tool that writes
+is separate and dumb.
+
+### Workflow
+
+1. `ldapctl merge plan` / `ldapimport analyze` produce the conflict
+   and violation report as structured data
+2. The report can be rendered as an interactive tree UI
+   (self-contained HTML, schema-explorer pattern: no server, opens
+   in a browser). Collapsible DIT, violation heat-coloring: core
+   violations, remappable issues, clean subtrees
+3. The admin resolves conflicts in the UI: per-entry decisions or
+   batch rules ("remap all uidNumbers below 10000", "strip all
+   jpegPhoto values")
+4. Output is an artifact, never a write: the resolved LDIF plus the
+   decision log (what was renamed, remapped, dropped, and by which
+   rule)
+
+### Two exits, both offline
+
+- `ldapctl merge apply <plan>`: executes exactly the frozen
+  artifact, guarded by content hashes of the source tenants;
+  refuses if sources changed since analysis
+- Take the resolved LDIF and load it manually into a fresh storage
+  unit
+
+### Rule
+
+Apply consumes only the frozen artifact. No interactive session
+ever holds a write handle to a storage unit. This keeps the
+hammer-it-out-quickly UI completely separated from the change
+window: review the LDIF, diff it, commit it to a repo, apply cold.
+
+### Status
+
+The UI is tooling, not architecture. The architectural commitment
+is only: plan artifacts are renderable and editable offline, and
+apply is artifact-driven with source-hash guards.
