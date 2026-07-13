@@ -1287,3 +1287,28 @@ replication metadata. No opcode is special. Operations that
 LDAPv3 shipped as extensions and ldap4 actually needs (whoami,
 cancel) are core operations. New operations arrive only by
 protocol version, never by side channel.
+
+## Design note: replication topology, single writer
+
+One writer per storage unit, N read replicas. Active-active is
+rejected: directory workloads are overwhelmingly reads, multi-
+master buys write availability at the cost of conflict resolution
+and silent divergence (OpenLDAP's CSN last-writer-wins can eat
+writes), and minutes of write unavailability during failover is
+nothing for directory write volumes. Silent conflicts are
+corruption; downtime is an inconvenience.
+
+Failover:
+
+- v1: operator-promoted, one guarded command.
+  `ldap4ctl replica promote <host>`: fences the old provider
+  (refuses writes if reachable), verifies the candidate holds the
+  highest CSN among reachable replicas, flips roles, repoints the
+  remaining replicas. Scriptable, atomic-ish, no hand-edited
+  configs. A runbook of manual steps is how split-brain happens at
+  03:00; one guarded command is safe indefinitely.
+- v2: Raft-elected promotion behind the same semantics. The v1
+  command becomes the manual override.
+
+Reads load-balance trivially: replicas are consistent or lagging,
+never divergent.
