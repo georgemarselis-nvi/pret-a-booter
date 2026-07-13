@@ -666,3 +666,40 @@ Notes:
   the 99% case ("is X a member of Y"). ldap4: relationships
   (membership, ownership, delegation) are first-class, server-resolved
   predicates, not hand-written set math. No set= mini-language.
+
+## limits: per-identity size/time limits (database section)
+
+Overrides global sizelimit/timelimit per consumer. One line per
+consumer class, in the database stanza.
+
+    limits <who> <limit-phrase>...
+
+who:
+    users                       all authenticated users
+    anonymous                   (dead on our server: bind_anon off)
+    dn.exact="cn=svc,..."       one identity
+    dn.subtree="ou=services,..."
+    dn.regex="^uid=.*,ou=x$"    POSIX ERE
+    group="cn=admins,ou=groups,..."   member of group
+
+limit-phrases:
+    size.soft=N     returned if client requests nothing
+    size.hard=N     ceiling on entries returned
+    size.unchecked=N  ceiling on candidates EXAMINED; exceeding
+                      refuses the search (adminLimitExceeded),
+                      pre-execution cost bound
+    time.soft=N     seconds, same semantics
+    time.hard=N
+    unlimited       valid value for any phrase (rootdn already
+                    exempt from all limits)
+
+Example, FEIDE bulk consumer:
+
+    limits dn.exact="cn=feide-svc,ou=services,dc=marsel,dc=is"
+        size.soft=500 size.hard=unlimited size.unchecked=unlimited
+        time.hard=120
+
+Notes:
+- evaluated first match wins, order matters (like ACLs)
+- timer starts at execution, not arrival: queue wait not counted
+- global sizelimit/timelimit still apply to anyone not matched
