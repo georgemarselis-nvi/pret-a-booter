@@ -1244,4 +1244,22 @@ makes indexing empirical. Third instance of the evidence-over-
 guesswork pattern, after observed-minimum ACLs and bridge audit
 mode.
 
+## Design note: timelimit is execution time, not a deadline
+
+The operation timer starts when a worker begins executing, not
+when the request arrives. Queue wait on a saturated server does
+not consume the client's time budget. Consequence: timelimit is
+not an end-to-end deadline, and the protocol documentation states
+this explicitly rather than leaving it as folklore (OpenLDAP
+behaves the same way but buries it).
+
+Metrics consequence: queue-wait and execution time are exported as
+separate labeled measurements per operation class. If only total
+or execution time is exported, saturation hides inside
+apparently-fast queries: a server at capacity shows healthy
+execution times while clients experience multi-second latency.
+Queue-wait percentile panels are the saturation indicator.
+
+Clients needing a true end-to-end deadline enforce it client-side;
+the requested-limit field bounds execution only.
 
