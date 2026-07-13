@@ -1122,4 +1122,65 @@ speed, that is a performance bug in the online path, not a
 workflow. One tool per trust boundary: ldapctl speaks protocol to
 the living; ldapimport touches files of the dead.
 
+## Design note: request governance (rate and concurrency limits)
 
+### Problem
+
+slapd has almost no semantic rate limiting: conn_max_pending caps
+queued operations per connection, thread pools bound global
+concurrency, and the limits directive governs size/time per
+identity, but nothing limits operations per second or concurrent
+operations per identity across connections. The standard deployment
+compensates with a firewall, which sees TLS streams, not LDAP
+operations: it cannot know that one authenticated identity opened
+three connections and is pumping ten thousand searches through
+them. Per-identity governance only exists where the identity
+exists: inside the server, after the bind.
+
+### Layering
+
+Every layer guards its own boundary:
+
+- network layer (firewall, nftables, SRX-class gear): SYN floods,
+  connection rate per source address, L3/L4 noise. Recommended in
+  front, out of scope for ldap4
+- server layer (ldap4d): everything requiring knowledge of the
+  authenticated identity or the operation
+
+### Mandatory per-identity limits
+
+All requests are authenticated (no anonymous operations exist), so
+every request has a name attached. Per identity, mandatory, with
+sane defaults:
+
+- concurrent in-flight operations, counted across all of the
+  identity's connections
+- operation rate (ops/second, token bucket or equivalent)
+- existing size and time limits fold into the same mechanism
+
+Overrides per identity or group through the same limits machinery
+that serves enumerated heavy consumers (bulk readers, sync
+services). Unlimited is not expressible, consistent with the
+timelimit rule: overrides raise ceilings, they do not remove them.
+
+### Interaction with client-requested timelimit
+
+Client-requested limits only shrink within the server ceiling and
+are innocent by construction: a flood of 1-second requests is
+cheaper for the server than the same flood at the ceiling. Floods
+are owned by this note's rate limits, not by the timelimit field.
+
+### Breach as signal
+
+Limit breaches are structured security events, not just refusals:
+identity, limit, observed value, source. An identity whose baseline
+is three queries a minute suddenly running thousands a second is a
+stolen credential or a broken deployment; the governance layer is
+also the detection layer. This feeds the same observed-baseline
+philosophy as the bridge audit mode.
+
+### Failure semantics
+
+Refusals are polite and typed: busy/rate-exceeded result with a
+human-readable reason and, where sane, a retry-after hint. Clients
+under limit never queue behind clients over it.
