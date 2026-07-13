@@ -790,4 +790,99 @@ documentation. The audit log is also the migration artifact: when
 the legacy application is finally replaced, the log states exactly
 what its successor must be able to do.
 
+## Design note: tenant isolation
 
+Applies when one deployment hosts directory trees for multiple
+organizations. Single-org deployments run one tenant and none of
+this costs them anything.
+
+### Principle
+
+Isolation is structural, not disciplinary. In OpenLDAP, multiple
+databases share one process and the only walls between tenants are
+ACL correctness and rootdn scoping: one misconfigured global ACL or
+an overlay in the wrong stanza leaks across tenants. Humans get
+that wrong. ldap4 does not rely on configuration discipline for
+tenant boundaries.
+
+### Logical isolation (storage-unit layer)
+
+Tenant boundaries are a property of the storage-unit abstraction
+(see: scale-out provisions, provision 1):
+
+- One storage unit per tenant. Hard boundary: no cross-unit search,
+  no cross-tenant referrals unless explicitly configured
+- Per-unit everything: administrative identity (rootdn equivalent),
+  ACL set, schema extensions, export/import scope, quotas, audit
+  log
+- No global superuser that spans tenants silently. Cross-tenant
+  administration is a named, logged capability
+- A search with a base above any tenant suffix fails or returns
+  nothing. It never aggregates tenants
+
+### Process isolation (kernel layer)
+
+One ldap4d process per storage unit. The kernel is the isolation
+boundary, not application code:
+
+- systemd instantiated units: `ldap4d@<tenant>.service`
+- Per-unit cgroup: tenant CPU, memory and IO quotas are systemd
+  directives, not application code
+- SELinux: shared type, distinct MCS category per instance, so
+  same-binary processes cannot touch each other's files or sockets
+- Separate database files, sockets and certificates per tenant
+- A thin front router exists only if tenants must share one
+  address; otherwise SNI or per-tenant addresses and no shared
+  component at all
+
+A memory-safety bug or parser exploit in one tenant's process
+cannot read another tenant's data. No amount of in-process ACL
+correctness provides that property.
+
+### Consequence for server internals
+
+The server code is never tenant-aware. Multi-tenancy is a
+deployment pattern: the subtree-to-storage-unit resolver plus
+process-per-unit orchestration. Non-traversal between tenants is
+free because no process can see two tenants.
+
+### Cost
+
+N processes instead of one, no shared cache, cross-tenant
+administration becomes an orchestration action. Trivial for
+directory workloads.
+
+### Cross-tenant references
+
+When tenants legitimately need to see each other's data, isolation
+becomes federation. Federation is explicit, named and owner-
+controlled. Three mechanisms, in order of preference:
+
+1. **Referrals.** Tenant A's entry points at tenant B's server
+   (`ref: ldaps://...`). The client chases the referral and
+   authenticates to B under B's rules. A never holds B's data; B's
+   ACLs decide everything. Cost: client-side complexity; many
+   legacy applications do not chase referrals.
+
+2. **Explicit proxy mount.** A named subtree in A (e.g.
+   `ou=partners,...`) backed by a proxy forward to B, using a
+   service identity that B issued and B's ACLs scope. Transparent
+   to clients. This is the bridge pattern pointed sideways: the
+   cross-reference is enumerated, named, auditable and revocable by
+   B unilaterally.
+
+3. **Shared third tree.** Both tenants reference a common storage
+   unit that neither owns, for genuinely mutual data such as a
+   shared contacts tree.
+
+Never permitted:
+
+- Direct cross-unit reads inside the server: reopens the hole the
+  process model closes
+- Replicating one tenant's subtree into another: creates a stale
+  copy outside the owner's control
+
+Rule: cross-tenant visibility is always granted by the data owner,
+scoped by the owner's ACLs, through a named channel the owner can
+kill. Consent flows from the owner; it is never configured into the
+consumer.
