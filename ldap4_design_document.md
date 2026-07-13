@@ -886,3 +886,69 @@ Rule: cross-tenant visibility is always granted by the data owner,
 scoped by the owner's ACLs, through a named channel the owner can
 kill. Consent flows from the owner; it is never configured into the
 consumer.
+
+That framing, "sovereign directory domains with explicit trust, for Linux,"
+is also the first honest marketing sentence ldap4 has. Note it somewhere.
+
+## Design note: policy layer (Linux GPO equivalent)
+
+Out of scope for the directory itself; documented here because the
+directory is the policy store and the tenant model defines policy
+scope. Separate product, post-v1 by a long margin.
+
+### What Windows GPO actually is
+
+Policy objects stored in the directory; a client agent pulls the
+policies applying to a machine or user, computes precedence (local
+→ site → domain → OU, with inheritance and overrides), and applies
+them. The storage, retrieval and precedence machinery translates
+directly to ldap4. The application machinery does not: Windows has
+one configuration surface (the registry); Linux has dconf, sshd
+config, sudoers, PAM, NetworkManager, firewalld and a hundred
+other formats, each with its own ownership semantics and reload
+behavior. Building typed backends for each is an ecosystem and
+eternal maintenance, which is why FreeIPA stopped at HBAC/sudo/
+SELinux maps and why Puppet/Ansible won general configuration.
+
+### Decision: compile to Ansible, build no backends
+
+The policy layer does only what Ansible cannot, and delegates to
+Ansible everything Ansible already owns.
+
+The policy layer provides:
+
+- Policy objects stored in the tenant tree, typed and
+  schema-validated. This is what raw Ansible lacks: a central typed
+  policy store
+- Precedence resolution: local → tenant → OU, inheritance,
+  overrides, producing one resolved policy per host or user
+- Kerberos-authenticated policy retrieval scoped by machine
+  identity
+- A compiler from resolved policy to an Ansible play
+
+Ansible provides:
+
+- Every configuration format on Linux, via 20 years of modules
+- Idempotence, drift correction, reload semantics
+- The apply loop: ansible-pull on a timer against the compiled
+  policy. No agent to write
+
+### Scope discipline
+
+- No typed backends are ever written. If a setting has no clean
+  Ansible module, the escape hatch is a policy payload that ships a
+  raw play, marked as such
+- The gap being filled is the compiler and the precedence model,
+  not the appliers
+
+### Team estimate
+
+Directory-side policy store, precedence resolver and compiler: one
+to two programmers, not a third team. The earlier three-team
+estimate assumed handwritten backends; compiling to Ansible deletes
+that work.
+
+### Product sentence
+
+Group Policy where the directory decides and Ansible applies.
+
