@@ -952,3 +952,47 @@ that work.
 
 Group Policy where the directory decides and Ansible applies.
 
+## Design note: merge preflight (ldapctl merge plan)
+
+### Problem
+
+Bringing two tenants together (merger, consolidation) fails on
+collisions that are invisible until something breaks: duplicate
+uids, overlapping mail domains, conflicting schema extensions,
+same-name groups with different members, policy rules touching the
+same resource.
+
+### Decision
+
+Merging is never a blind import. `ldapctl merge plan <tenant-a>
+<tenant-b>` produces a full conflict report before anything is
+written:
+
+- identity collisions: uid, uidNumber/gidNumber (should be empty
+  under slice allocation), mail, principal names
+- schema extension diff: additions, incompatible redefinitions of
+  the same attribute or objectClass (the shared opinionated core
+  guarantees the diff surface is only the extension layer)
+- group and policy objects with colliding names or overlapping
+  targets
+
+Each conflict is presented with resolution options (rename, remap,
+keep-both-under-tenant-prefix, defer). The admin resolves; the
+resolved plan is a reviewable artifact (JSON, diffable, goes in a
+repo); `ldapctl merge apply <plan>` executes exactly the plan and
+nothing else. Apply refuses to run if the tenants have changed
+since the plan was generated (plan carries content hashes).
+
+### Properties
+
+- Nothing is written until every conflict has an explicit
+  resolution
+- The plan is the audit trail: what was renamed, what was merged,
+  who decided
+- Dry-run by construction: plan generation is read-only
+
+### Precedent
+
+The workflow is a merge request for directories: diff, review,
+resolve, apply. Same reason git refuses to merge with unresolved
+conflicts.
