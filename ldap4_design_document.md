@@ -1411,3 +1411,52 @@ Retention is policy (purge age per tenant), existence is not.
 Cost acknowledged: every write amplifies into the feed. Feed
 storage is a separate region of the storage unit with its own
 purge policy, so audit volume never competes with entry data.
+
+## Design note: two-phase migration, core before extensions
+
+Site extensions are the wild west: every deployment bolts on its
+own attributes, and migrations die in the bolt-on layer, not the
+core. ldap4 makes the layers separable at export, visible at diff
+and sequential at import.
+
+### Provenance-split export
+
+Every attribute value is typed by provenance: core schema or a
+named extension (see: core/extension schema separation). Export
+honors the split:
+
+- `ldapexport --core-only`: the tenant stripped to the
+  guaranteed-portable subset. Loads into any ldap4 deployment by
+  construction
+- `ldapexport --extensions`: the bolt-on payload as a separate
+  labeled artifact: extension schema definitions plus the values
+  they own, per extension
+
+### Two-phase import
+
+Phase 1: import the core artifact. Identities, groups, the DIT
+skeleton: everything the opinionated core guarantees. The tenant
+is functional at the end of phase 1.
+
+Phase 2: import extension artifacts, one extension at a time, each
+through the reconciliation pipeline (analyze, conflict report,
+frozen plan, apply). A failing extension blocks only itself:
+phase 1 is never held hostage by someone's 2009 custom
+objectClass.
+
+### Diff shows the layers
+
+The interactive reconciliation tree renders provenance visibly:
+core subtree structure in one visual register, extension-owned
+attributes and classes in another, per named extension. "What did
+this company bolt on" is navigation, not archaeology; the migrant
+sees exactly which layer each conflict lives in.
+
+### Why
+
+Migrations get a working directory on day one (core), then absorb
+the wild west incrementally, with evidence, per extension. The
+failure mode of legacy migrations: all-or-nothing imports dying
+midway through someone's bolt-ons: is structurally excluded.
+
+
