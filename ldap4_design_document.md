@@ -1362,3 +1362,26 @@ validating, and that is decided by evidence:
 Trusted fast path is earned by provenance, never claimed by flag.
 The restore-speed use case -q served is covered by the manifest
 path at full safety.
+
+## Design note: invariants are core, extension points are for behavior
+
+The overlay mechanism (OpenLDAP 2.2) was sound architecture: an
+interception pipeline letting features ship independently instead
+of bloating the monolith. The mistake was what got shipped as
+overlays: referential integrity (refint) and uniqueness (unique)
+are database invariants, Codd-era table stakes, and slapd made
+them opt-in plugins, default off, stackable in the wrong order.
+Correctness became an accessory.
+
+ldap4 keeps the pipeline (every operation through the same stack:
+see no-privileged-opcodes note) and draws the line:
+
+- invariants are core, always on, not configurable off:
+  referential integrity, uniqueness constraints, schema validity
+- extension points are for behavior: logging, sync, rewriting,
+  metrics. Nothing plugged into the pipeline can weaken an
+  invariant; extensions observe and transform, they do not gate
+  correctness
+
+A deployment where entries can dangle or duplicate is not a
+configuration; it is a bug the operator was allowed to write.
