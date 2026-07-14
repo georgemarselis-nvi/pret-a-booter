@@ -1341,3 +1341,24 @@ immediate.
 Same shape as PostgreSQL CREATE INDEX CONCURRENTLY: solved
 problem, adopted not designed. Consistent with online-first bulk
 loading: no offline step exists for a running system.
+
+## Design note: no -q flag, provenance decides validation
+
+slapindex/slapadd -q skips consistency checking as an operator
+flag: go-faster bravado with corruption risk in a man-page
+subordinate clause. ldap4 has no equivalent flag. Validation is
+never skippable by assertion; what changes is what needs
+validating, and that is decided by evidence:
+
+- ldapexport artifacts carry a manifest: content hashes, entry
+  count, schema version. ldapimport of a manifest-bearing artifact
+  verifies integrity against the manifest: cryptographic, cheap,
+  no per-entry re-derivation of what the exporting server already
+  guaranteed
+- foreign LDIF (no manifest, or manifest fails) gets the full
+  validation pipeline: schema, constraints, referential checks.
+  Not disableable
+
+Trusted fast path is earned by provenance, never claimed by flag.
+The restore-speed use case -q served is covered by the manifest
+path at full safety.
