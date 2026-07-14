@@ -1385,3 +1385,29 @@ see no-privileged-opcodes note) and draws the line:
 
 A deployment where entries can dangle or duplicate is not a
 configuration; it is a bug the operator was allowed to write.
+
+## Design note: change feed, one mechanism, two consumers
+
+Adopted from slapo-accesslog, promoted from overlay to core. The
+directory maintains an ordered, structured record of mutations:
+who, what, when, attribute-level detail (add/delete/replace per
+value), result. Records are schema-typed and queryable through the
+protocol like any data, subject to ACLs: no shell access needed to
+read the trail.
+
+One mechanism, two consumers:
+
+- human: audit. `ldapctl log query` with filters (by DN subtree,
+  identity, operation type, time range), indexed like anything
+  else
+- machine: replication. Replicas consume the same records as
+  replay instructions (delta replication: ship the change, not the
+  entry). Rides the provision-2 CSN metadata
+
+Being core, not optional: the feed cannot be off, per the
+invariants-are-core rule; audit that can be disabled is not audit.
+Retention is policy (purge age per tenant), existence is not.
+
+Cost acknowledged: every write amplifies into the feed. Feed
+storage is a separate region of the storage unit with its own
+purge policy, so audit volume never competes with entry data.
