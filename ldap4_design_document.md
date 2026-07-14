@@ -1459,4 +1459,31 @@ the wild west incrementally, with evidence, per extension. The
 failure mode of legacy migrations: all-or-nothing imports dying
 midway through someone's bolt-ons: is structurally excluded.
 
+## Design note: RFC boundary blessed as the portability contract
 
+The classification is official; the consequence is ours.
+
+RFC 4512 defines mandatory system schema; RFC 4519 the standard
+user schema; RFC 4524 (cosine), RFC 2798 (inetOrgPerson) and
+RFC 2307 (NIS) complete the standards-defined inventory, with
+IANA registries recording ownership of every name. ldap4 blesses
+this exact set as the portability boundary:
+
+- RFC-defined schema = the core. Guaranteed portable, phase 1 of
+  any migration, the `--core-only` export surface
+- everything else = named extension by definition, however old,
+  however load-bearing (norEdu*, vendor schemas, site bolt-ons)
+
+No standards body defined this consequence; the sets are theirs,
+the contract is ours. For migration FROM OpenLDAP, the same
+boundary applies without server enforcement: a splitter tool
+classifies a slapcat export against the RFC inventory (static,
+enumerable) and emits the two-artifact form the two-phase import
+consumes. Legacy deployments get provenance data for free because
+the RFC set is known and fixed.
+
+ldap4's own core schema is a curated subset/refinement of the RFC
+set (no-binary-blobs rule amends it, e.g. jpegPhoto to
+jpegPhotoURL); deviations from RFC schema are themselves
+enumerated in this document, so the delta between "RFC core" and
+"ldap4 core" is a published list, not folklore.
