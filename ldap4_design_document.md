@@ -1054,7 +1054,7 @@ database; every additional database is manual mkdir, chown and
 restorecon, and the failure mode on a wrong-permission directory
 is a startup error at best.
 
-ldap4 resolves this structurally. `ldap4ctl tenant create` is a
+ldap4 resolves this structurally. `ldapctl tenant create` is a
 privileged orchestration action, distinct from the unprivileged
 ldap4d runtime, and provisions in one atomic step:
 
@@ -1301,7 +1301,7 @@ corruption; downtime is an inconvenience.
 Failover:
 
 - v1: operator-promoted, one guarded command.
-  `ldap4ctl replica promote <host>`: fences the old provider
+  `ldapctl replica promote <host>`: fences the old provider
   (refuses writes if reachable), verifies the candidate holds the
   highest CSN among reachable replicas, flips roles, repoints the
   remaining replicas. Scriptable, atomic-ish, no hand-edited
