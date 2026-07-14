@@ -1312,3 +1312,14 @@ Failover:
 
 Reads load-balance trivially: replicas are consistent or lagging,
 never divergent.
+
+### Addendum: substring index default
+
+Default sub indexing covers prefix and suffix (forward plus
+reversed-string index): both directions cheap to serve, cost is
+one extra index, admin never picks subinitial/subfinal. Interior
+matching (subany equivalent, n-gram based) is opt-in per
+attribute: highest write and space cost, rarest legitimate query
+shape; the planner flags scan-class interior-wildcard filters
+when a deployment needs it. Cost decisions surface through
+measurement, never through hand-tuned variant selection.
