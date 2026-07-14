@@ -1323,3 +1323,21 @@ attribute: highest write and space cost, rarest legitimate query
 shape; the planner flags scan-class interior-wildcard filters
 when a deployment needs it. Cost decisions surface through
 measurement, never through hand-tuned variant selection.
+
+## Design note: online index builds
+
+Index changes are online operations. slapd requires offline
+slapindex to build newly declared indexes over existing entries;
+ldap4 does not reproduce this.
+
+`ldapctl index add <attr> <type>` starts a background build over
+existing entries. Concurrent writes dual-write into the building
+index. The planner treats the attribute as unindexed (scan class)
+until the build completes and flips to ready; queries never see a
+partial index. Build status is visible via `ldapctl index status`;
+builds are resumable after restart. `ldapctl index drop` is
+immediate.
+
+Same shape as PostgreSQL CREATE INDEX CONCURRENTLY: solved
+problem, adopted not designed. Consistent with online-first bulk
+loading: no offline step exists for a running system.
