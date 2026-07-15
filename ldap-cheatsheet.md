@@ -905,3 +905,29 @@ feature in 2.6.
 Uses: one org splitting its own tree across databases (size,
 per-subtree replication). Anti-pattern: gluing separate
 organizations into one search space: ACL-discipline walls only.
+
+## lastmod: two things, do not confuse them
+
+### lastmod DIRECTIVE (built-in, default ON)
+
+Per-entry operational metadata maintained by slapd on every write:
+modifiersName, modifyTimestamp, creatorsName, createTimestamp,
+entryCSN. Default on; `lastmod off` exists for exotic
+proxy/migration cases (e.g. back-ldap preserving upstream values)
+and should otherwise never be touched: syncrepl depends on
+entryCSN.
+
+Read them explicitly (operational attrs are not returned by
+default):
+
+    ldapsearch ... "(uid=george)" modifyTimestamp modifiersName +
+
+### lastmod OVERLAY (slapo-lastmod, obsolete)
+
+Entirely different: maintains ONE service entry per database
+recording the DN and timestamp of the most recently modified
+entry in the whole database. Pre-syncrepl change-detection hack:
+integrators polled a single entry to learn "something changed."
+Serializes every write through one hot record; one-bit resolution.
+Superseded by syncrepl (subscribe) and accesslog (query what
+changed). Contrib-tier obscurity in 2.6; do not deploy.
