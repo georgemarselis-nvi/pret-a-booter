@@ -1568,4 +1568,41 @@ The doorman line: weird auth never enters the building: bridge it
 at the door or vaya con dios. The bridge exists so a shop with one
 cursed appliance does not stay on ldap3 over its worst device.
 
+## Design note: join state is server truth, status is a live probe
+
+The Linux domain-join problem is not the joining; it is that join
+STATE is a vibe. SSSD/realmd smear enrollment across five places
+(keytab, sssd.conf, nsswitch.conf, PAM stack, krb5.conf) with no
+single source of truth; "am I joined" means inspecting all five,
+and realm list answers from its own cache, not from evidence. AD
+solved this decades ago: the join is an object (machine account)
+and Test-ComputerSecureChannel is a live probe against it.
+
+ldap4 adopts that shape:
+
+- Enrollment creates a machine entry in the DIT (per the rule that
+  any DN used for authentication is a real entry). Joined = the
+  entry exists AND the machine's keytab can authenticate as it.
+  One truth, server-side, queryable
+- `ldapctl client status` is a live probe, not a config reader: it
+  performs real authentication with the machine credential and a
+  real lookup through the enrolled path, reporting green/red per
+  layer with human-readable reasons (keytab/ticket, NSS
+  resolution, PAM stack), exit code for scripts. The
+  Test-ComputerSecureChannel of the system
+- Enrollment mutates system files only as an explicit admin
+  action, delegated to the distro switchboard (authselect or
+  equivalent) with printed diff and native rollback; packages
+  never touch auth config
+- Directory and realm halves compose: the enroll verb performs the
+  directory join and calls the realm tooling (krbctl) for the
+  Kerberos half; each usable alone for exotic cases, one operator
+  verb by default. A machine enrolled for lookup but not auth is a
+  flagged, named state, not an accident
+
+Because state lives server-side, the enrollment tool is thin (per
+the thin-client principle) and CAN be a separate binary without
+creating a second source of truth: the tool is an actor against
+the DIT, never the keeper of join state.
+
 
