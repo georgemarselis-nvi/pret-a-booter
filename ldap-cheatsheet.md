@@ -1021,3 +1021,28 @@ Client exercises cn=busy,ou=errors,... and receives LDAP_BUSY.
 Covers result codes, referrals, delays. The only overlay whose
 purpose is testing; keep it off production configs.
 
+
+## syncprov: slapo-syncprov(5)
+
+The provider half of replication. Consumers run syncrepl (built-in
+client engine); a database that consumers replicate FROM must load
+syncprov:
+
+    overlay syncprov
+    syncprov-checkpoint 100 10     # write contextCSN every 100 ops / 10 min
+    syncprov-sessionlog 10000      # in-memory op log: reconnecting
+                                   # consumers get deltas, not full resync
+
+Provides: contextCSN tracking, RFC 4533 sync search handling
+(refreshOnly = polling, refreshAndPersist = push), session log for
+cheap reconnects.
+
+Delta-syncrepl = syncprov + accesslog wired together: consumers
+replay the accesslog change feed instead of receiving whole
+entries. Configure syncprov on BOTH the main db and the accesslog
+db in that setup.
+
+Indexing: entryCSN and entryUUID eq indexes on any replicated
+database, or consumers resync painfully.
+
+Chapter 7 owns the full treatment.
