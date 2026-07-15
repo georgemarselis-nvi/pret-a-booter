@@ -981,3 +981,27 @@ without it, bind brute-force runs at full speed with no lockout.
 Irrelevant when passwords are not local: back-ldap passthrough
 (policy lives in the proxied server, e.g. AD) or Kerberos-only
 designs (policy is the KDC's job).
+
+## refint: slapo-refint(5)
+
+Reactive referential cleanup on delete/rename, for enumerated
+DN-valued attributes:
+
+    overlay refint
+    refint_attrs member uniqueMember manager owner seeAlso
+    refint_nothing "cn=placeholder,dc=marsel,dc=is"
+    refint_modifiersname "cn=refint,dc=marsel,dc=is"
+
+- delete of DN X: X removed from listed attrs everywhere
+- modrdn of X to Y: references rewritten to Y
+- refint_nothing: placeholder DN inserted where removal would
+  violate schema (groupOfNames needs >=1 member)
+- fixups are internal ops attributed to refint_modifiersname
+  (visible in accesslog under that identity)
+
+Limits: REACTIVE only: creating a reference to a nonexistent DN
+is not prevented, ever; and only listed attributes are covered:
+anything unlisted dangles silently. Cleanup, not integrity.
+
+Pairs with the group work: any deployment with real groups and no
+refint accumulates ghost members on every offboarding.
