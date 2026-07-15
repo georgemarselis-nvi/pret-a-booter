@@ -1510,4 +1510,8 @@ Test for every future knob: if the imagined deployment guide
 would say "always set this to X", the knob is a bug: ship X.
 ldapctl stays thin because the server needs no compensation. The
 day someone builds a simplification layer over ldap4, that layer
-is a bug report.
+is a bug report. 
+
+ldapctl carries no logic a reimplementation would have to copy:
+parse, one call, render. The server owns every decision; a weekend
+clone in another language is the acceptance test.
