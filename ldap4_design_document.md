@@ -1487,3 +1487,27 @@ set (no-binary-blobs rule amends it, e.g. jpegPhoto to
 jpegPhotoURL); deviations from RFC schema are themselves
 enumerated in this document, so the delta between "RFC core" and
 "ldap4 core" is a published list, not folklore.
+
+## Design principle: compensating tooling is evidence of wrong defaults
+
+Every wrapper, GUI, glue script and deployment framework that
+exists to keep humans away from a server's native configuration
+is a measurement of that configuration's wrongness. Nobody builds
+compensation for correct behavior. FreeIPA is the proof case: an
+entire product category (389 DS + Kerberos + web UI + certmonger
++ glue) whose function is wrapping directory-era defaults so no
+operator touches them. Every slapd Ansible role, this project's
+included, is the same evidence at smaller scale.
+
+ldap4 fixes the default instead of shipping the wrapper. Applied
+instances already in this document: no anonymous-bind toggle, no
+unlimited limits, no -q validation bypass, no substring-variant
+hand-tuning, no offline index builds, provisioning as one atomic
+privileged action. Each deletes a knob some wrapper would
+otherwise exist to hide.
+
+Test for every future knob: if the imagined deployment guide
+would say "always set this to X", the knob is a bug: ship X.
+ldapctl stays thin because the server needs no compensation. The
+day someone builds a simplification layer over ldap4, that layer
+is a bug report.
