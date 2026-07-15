@@ -1005,3 +1005,19 @@ anything unlisted dangles silently. Cleanup, not integrity.
 
 Pairs with the group work: any deployment with real groups and no
 refint accumulates ghost members on every offboarding.
+
+## retcode: slapo-retcode(5)
+
+Fault injection for client testing: scripted abnormal responses.
+Entries under a configured parent (or matching patterns) return
+chosen result codes, optionally delayed:
+
+    overlay retcode
+    retcode-parent "ou=errors,dc=marsel,dc=is"
+    retcode-item "cn=busy" 0x33 text="server busy" sleeptime=2
+    # plus a library of ready-made items via retcode.conf
+
+Client exercises cn=busy,ou=errors,... and receives LDAP_BUSY.
+Covers result codes, referrals, delays. The only overlay whose
+purpose is testing; keep it off production configs.
+
