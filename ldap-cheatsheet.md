@@ -850,3 +850,38 @@ overlays); removed from modern OpenLDAP, no slapo-denyop(5) in
 directive does the same job and survives (see restrict entry,
 including the extended-op blocklist hole). If found in old
 configs: replace with restrict.
+
+## dynlist: slapo-dynlist(5)
+
+Computed entries: evaluated per READ, nothing stored. An entry
+with objectClass groupOfURLs carries memberURL holding an LDAP
+URL; reading the entry executes the search and splices results in
+as member values (dynamic group) or as attribute values from
+other entries (dynamic attributes).
+
+    overlay dynlist
+    dynlist-attrset groupOfURLs memberURL member
+
+    # the group entry:
+    dn: cn=it-staff,ou=groups,dc=marsel,dc=is
+    objectClass: groupOfURLs
+    memberURL: ldap:///ou=people,dc=marsel,dc=is??sub?(department=IT)
+
+Modern role: also emulates memberOf on user entries (the separate
+memberof overlay was deprecated in 2.5; dynlist absorbed the job):
+
+    dynlist-attrset groupOfURLs memberURL member+memberOf@groupOfNames
+
+vs dyngroup: dyngroup intercepts COMPARE only ("is X a member")
+and never expands membership in reads; dynlist materializes the
+list in search results. dyngroup = cheap compare hack, dynlist =
+the real thing.
+
+Costs:
+- every read of the group executes the memberURL search;
+  unindexed filter = scan per read
+- membership varies with query-time state; two reads may disagree
+- ACLs against dynamic membership: evaluation-order landmines
+
+Alive and maintained; one of the few overlays MORE relevant in
+2.6 than in the book's era.
