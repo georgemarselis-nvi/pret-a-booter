@@ -1046,3 +1046,34 @@ Indexing: entryCSN and entryUUID eq indexes on any replicated
 database, or consumers resync painfully.
 
 Chapter 7 owns the full treatment.
+
+## translucent: slapo-translucent(5)
+
+Remote entries, locally augmented. Stacks on back-ldap: searches
+proxy to the remote server, then attributes from a local MDB are
+spliced over the returned entries. The remote directory is never
+modified; writes go to the local overlay database.
+
+    database ldap
+    suffix "dc=marsel,dc=is"
+    uri ldaps://dc01.example.com
+    overlay translucent
+    translucent_local <attrs>      # attrs searchable locally
+    translucent_remote <attrs>     # attrs searched remotely
+    # plus a local database stanza for the overlay storage
+
+Semantics:
+- read: remote entry + local attrs merged, local wins on overlap
+- write: lands in the local overlay db only
+- bind: passthrough to remote (auth stays remote)
+- search filters on local-only attrs need translucent_local, or
+  filtering happens remotely where the attr does not exist
+
+Use case: augmenting a directory you cannot write to (vendor AD,
+another org's server) with your own attributes. FEIDE candidate:
+norEdu* stored locally over proxied AD entries.
+
+Caveats: local overlay data has no referential tie to remote
+entries (remote deletes leave orphaned local attrs: no refint
+across the seam); composition with rwm/pcache is order-sensitive
+folklore: test, do not trust.
