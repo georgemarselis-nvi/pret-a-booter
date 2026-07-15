@@ -931,3 +931,30 @@ integrators polled a single entry to learn "something changed."
 Serializes every write through one hot record; one-bit resolution.
 Superseded by syncrepl (subscribe) and accesslog (query what
 changed). Contrib-tier obscurity in 2.6; do not deploy.
+
+## pcache: slapo-pcache(5)
+
+Proxy cache in front of back-ldap/back-meta: caches search
+RESULTS in a local database so repeated queries skip the upstream
+round-trip.
+
+    overlay pcache
+    pcache mdb 100000 1 1000 100        # backend, max entries...
+    pcache-attrset 0 cn uid mail department
+    pcache-template (department=) 0 3600    # filter shape, attrset, TTL
+
+Semantics:
+- caches by query TEMPLATE (filter shape + attribute set), not
+  raw query string; answers semantically CONTAINED queries from
+  cache ((department=IT) cached can answer
+  (&(department=IT)(cn=a*)))
+- negative caching for misses (separate TTL)
+- binds are never cached: passthrough auth always goes upstream
+
+Trade: staleness window against the proxied server (disabled
+upstream user keeps resolving locally until TTL). Size TTLs to
+provisioning-latency tolerance.
+
+FEIDE relevance: the one overlay that composes with our
+back-ldap-to-AD design; hold in reserve for AD query load, not
+day-one config.
