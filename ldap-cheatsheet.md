@@ -885,3 +885,23 @@ Costs:
 
 Alive and maintained; one of the few overlays MORE relevant in
 2.6 than in the book's era.
+
+## glue / subordinate (built-in since 2.4; no overlay line needed)
+
+Links databases into one search space. Child database declares:
+
+    database mdb
+    suffix "ou=users,dc=marsel,dc=is"
+    subordinate
+    ...
+
+Parent database (suffix "dc=marsel,dc=is") then returns child
+entries for searches at its base. Child keeps its own storage,
+indexes and ACL evaluation; loses independent search visibility.
+
+Book-era `overlay glue` is gone; the subordinate keyword IS the
+feature in 2.6.
+
+Uses: one org splitting its own tree across databases (size,
+per-subtree replication). Anti-pattern: gluing separate
+organizations into one search space: ACL-discipline walls only.
