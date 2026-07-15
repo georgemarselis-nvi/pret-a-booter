@@ -958,3 +958,26 @@ provisioning-latency tolerance.
 FEIDE relevance: the one overlay that composes with our
 back-ldap-to-AD design; hold in reserve for AD query load, not
 day-one config.
+
+## ppolicy: slapo-ppolicy(5)
+
+Password policy enforcement for LOCAL passwords (userPassword
+verified by this slapd). Policies are DIT entries
+(pwdPolicy objectClass), assigned per-user (pwdPolicySubentry) or
+via a default:
+
+    overlay ppolicy
+    ppolicy_default "cn=default,ou=policies,dc=marsel,dc=is"
+
+Enforces at bind / password change: lockout after pwdMaxFailure,
+expiry (pwdMaxAge) with grace binds, history (pwdInHistory),
+minimum length/quality (pwdCheckQuality + external check module),
+must-change-after-reset. 2.5+ implements the final IETF draft
+behavior.
+
+Near-mandatory on any slapd that verifies passwords itself:
+without it, bind brute-force runs at full speed with no lockout.
+
+Irrelevant when passwords are not local: back-ldap passthrough
+(policy lives in the proxied server, e.g. AD) or Kerberos-only
+designs (policy is the KDC's job).
