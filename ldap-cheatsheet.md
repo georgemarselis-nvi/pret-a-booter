@@ -731,3 +731,76 @@ Traps:
       1.3.6.1.4.1.4203.1.11.1   Password Modify (RFC 3062)
       1.3.6.1.4.1.4203.1.11.3   WhoAmI (harmless, read)
   Check rootDSE supportedExtension for what your build ships
+
+# Overlays
+
+An overlay is a module that registers hooks around directory
+operations: a middleware pipeline per database. Requests pass
+through the overlay stack before reaching the backend; results
+pass back up through the same stack. Overlays add behavior
+(logging, integrity, rewriting, sync) without touching backend
+code.
+
+Configuration, slapd.conf file mode:
+
+    database mdb
+    suffix "dc=marsel,dc=is"
+    ...
+    overlay <name>
+    <overlay-specific directives>
+
+Rules:
+
+- `overlay` lines go INSIDE a database section, after the backend
+  directives
+- Stack order matters: overlays execute in the order declared;
+  wrong order = wrong semantics (e.g. an integrity overlay after a
+  rewriting overlay sees rewritten DNs)
+- Each overlay has a man page: slapo-<name>(5)
+- Modules may need loading first (moduleload <name>) depending on
+  how the package was built; Debian ships most as loadable modules
+
+History: introduced in 2.2 because pre-overlay, every feature
+meant patching the slapd monolith. Sound architecture; the
+mistake was shipping invariants (refint, unique) as optional
+plugins.
+
+## accesslog: slapo-accesslog(5)
+
+Audit trail as an LDAP tree. A second, dedicated database (e.g.
+suffix cn=accesslog) holds log records; the overlay attaches to
+the real database and on every write synthesizes an entry into
+the log database:
+
+    reqStart=20260716...,cn=accesslog
+    objectClass: auditModify
+    reqAuthzID: <who bound>
+    reqDN: <entry touched>
+    reqMod: <attribute-level change detail>
+    reqResult: <result code>
+
+Queryable like any data, subject to ACLs:
+
+    ldapsearch -b cn=accesslog
+      "(&(reqType=modify)(reqAuthzID=uid=admin,...))"
+
+Minimal config on the REAL database:
+
+    overlay accesslog
+    logdb cn=accesslog
+    logops writes
+    logpurge 07+00:00 01+00:00   # keep 7 days, sweep daily
+
+Plus a separate `database mdb` stanza for cn=accesslog itself
+(its own directory, its own maxsize).
+
+Notes:
+
+- logops can include reads/binds: write volume explodes, audit
+  writes only unless compliance demands more
+- every logged op is an extra write: log db on its own storage
+  region if volume matters
+- dual use: delta-syncrepl consumers read this tree as replication
+  replay instructions
+- useless under a pure back-ldap proxy design: writes happen in
+  the proxied server, nothing to log locally
