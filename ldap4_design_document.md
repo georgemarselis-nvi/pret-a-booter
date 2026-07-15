@@ -1605,4 +1605,24 @@ the thin-client principle) and CAN be a separate binary without
 creating a second source of truth: the tool is an actor against
 the DIT, never the keeper of join state.
 
+## Design note: no result caching
 
+ldap4 has no result cache, by principle:
+
+- Storage reads are memory-speed by architecture (memory-mapped
+  engine; the OS page cache is the cache). A result cache above
+  the storage layer buys microseconds
+- It costs the two hard problems caches carry: invalidation
+  correctness, and ACL bypass risk: a cached result computed for
+  identity A must never answer identity B, so the cache key must
+  carry the full authorization context, at which point hit rates
+  collapse and the machinery is a complicated way to be slightly
+  wrong
+- Slow reads have a correct fix: the planner classifies them, the
+  metrics name the missing index, the index gets built online.
+  Caching would mask the signal the sensor exists to produce
+
+Staleness in identity data is a lie the server tells. If ldap4
+ever gains a proxy role fronting another directory, caching there
+is an explicit named component with declared TTLs and visible
+staleness: never a default, never silent.
