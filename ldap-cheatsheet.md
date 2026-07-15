@@ -804,3 +804,49 @@ Notes:
   replay instructions
 - useless under a pure back-ldap proxy design: writes happen in
   the proxied server, nothing to log locally
+
+
+## auditlog: slapo-auditlog(5)
+
+Changes appended as LDIF lines to a flat file. One directive:
+
+    overlay auditlog
+    auditlog /var/log/slapd-audit.ldif
+
+vs accesslog: no second database, no queries, no purge policy,
+no ACLs on the trail (filesystem permissions only), rotation is
+manual. Output is valid LDIF: usable as crude replay source.
+Small-deployment paper trail; accesslog the moment you want to
+query the audit history.
+
+## chain: slapo-chain(5)
+
+Server-side referral chasing: back-ldap instantiated inside an
+overlay. Client sends op, server hits a referral, server follows
+it itself and returns merged results; client never sees the
+referral.
+
+Production niche: write-to-replica. Syncrepl replicas refer writes
+to the provider; clients that cannot chase referrals break. chain
+on the replica forwards writes upstream transparently:
+
+    overlay chain
+    chain-uri ldaps://provider.example.com
+    chain-idassert-bind bindmethod=simple
+        binddn="cn=chain,..." credentials=...
+        mode=self
+
+Caveats: the replica re-authenticates upstream with its own
+identity (idassert), so provider-side ACLs must trust the chain
+identity to assert users: authentication provenance gets muddy.
+Loops prevented by depth limit. Useless under pure back-ldap
+designs (already proxying).
+
+## denyop: DEAD
+
+Demonstration overlay (shipped as example code for writing
+overlays); removed from modern OpenLDAP, no slapo-denyop(5) in
+2.6. Disallowed listed operations per database: the restrict
+directive does the same job and survives (see restrict entry,
+including the extended-op blocklist hole). If found in old
+configs: replace with restrict.
