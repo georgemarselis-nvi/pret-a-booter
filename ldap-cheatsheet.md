@@ -1077,3 +1077,25 @@ Caveats: local overlay data has no referential tie to remote
 entries (remote deletes leave orphaned local attrs: no refint
 across the seam); composition with rwm/pcache is order-sensitive
 folklore: test, do not trust.
+
+## unique: slapo-unique(5)
+
+Write-time value uniqueness for chosen attributes, per scope:
+
+    overlay unique
+    unique_uri ldap:///ou=people,dc=marsel,dc=is?uid,mail?sub
+
+On add/modify, the overlay searches the URI scope for the incoming
+value; a hit = constraintViolation. Multiple unique_uri lines =
+multiple independent uniqueness domains.
+
+Limits:
+- no retroactive check: enabling over existing duplicates leaves
+  them; only NEW duplicates are refused
+- check-then-write: a race window under concurrent writes
+- scope literalism: uid unique within the URI subtree only: a
+  duplicate in another subtree passes if uncovered
+- internal checking search vs ACLs: historic source of surprises
+
+Pair with refint conceptually: the two invariant overlays; both
+default off, both enumerated rather than schema-derived.
