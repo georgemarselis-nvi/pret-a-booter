@@ -1515,3 +1515,57 @@ is a bug report.
 ldapctl carries no logic a reimplementation would have to copy:
 parse, one call, render. The server owns every decision; a weekend
 clone in another language is the acceptance test.
+
+
+## Design note: authentication ladder, passwords are a ramp not a floor
+
+v4's destination is Kerberos-only. All authentication, including
+second factors, happens at the KDC (OTP via FAST pre-auth,
+RFC 6560; hardware keys via PKINIT, RFC 4556); the directory never
+sees a credential of any kind, only tickets. The directory's 2FA
+story is: it has none, on purpose. That is the KDC's job and
+krbctl's problem (parked with the Kerberos arc). Systems that bolt
+second factors onto the directory bind path reintroduce
+credentials exactly where this design evicted them.
+
+The first iteration nonetheless accepts simple binds over the
+mandatory TLS channel, because refusing them on day one refuses
+every existing client. The ramp is explicit and mechanically
+enforced:
+
+- Phase 1 (initial releases): simple bind over TLS accepted.
+  Passwords are verified against the KDC (passthrough), never
+  stored in the directory: the no-passwords-in-DIT rule holds from
+  day one; simple bind is a compatibility veneer over Kerberos
+  verification
+- Phase 2: simple bind accepted, deprecation warning in the bind
+  response message and a counter in the metrics (identities still
+  binding simple, per tenant: the sensor pattern; admins see
+  exactly who has not migrated)
+- Phase 3: simple bind refused by default, per-identity exception
+  list (enumerated, expiring: same shape as the bridge: named
+  legacy consumers, not a global toggle)
+- Phase 4: the code path is removed
+
+The phase is a server release property, not a config knob: no
+deployment can elect to live in phase 1 forever, per the
+compensating-tooling principle. Phase 2 metrics make phase 3
+schedulable with evidence instead of guesswork.
+
+### Addendum: weird-auth interception rule
+
+Password-like binds over TLS are translated to KDC verification
+and logged for extinction: the metrics name every identity and
+mechanism still doing it. Challenge-response mechanisms (NTLM
+relics, digest schemes, appliance HMAC dances) are untranslatable:
+the server never possesses a verifiable secret, and faking the
+exchange means a parallel credential store, which is the disease
+returning through the side door. Those get a named bridge (scoped
+identity, enumerated, expiring) or refusal. No parallel credential
+store, ever.
+
+The doorman line: weird auth never enters the building: bridge it
+at the door or vaya con dios. The bridge exists so a shop with one
+cursed appliance does not stay on ldap3 over its worst device.
+
+
