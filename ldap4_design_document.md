@@ -1626,3 +1626,40 @@ Staleness in identity data is a lie the server tells. If ldap4
 ever gains a proxy role fronting another directory, caching there
 is an explicit named component with declared TTLs and visible
 staleness: never a default, never silent.
+
+## Design note: one canonical config, commented out
+
+ldap4 ships exactly one configuration file: every option present,
+every option commented out, the default value stated inline in the
+comment. There is no config library, no per-scenario templates, no
+include directive.
+
+Properties:
+
+- An empty (or untouched) config file is a valid, fully functional
+  server. Defaults are the documentation
+- Every uncommented line is a visible, deliberate deviation from
+  default. `diff` against the shipped file yields the deployment's
+  complete list of deviations: the audit artifact for "what did
+  this site change"
+- Comments carry the reasoning, not just the syntax: what the
+  option does, why the default is what it is, references where
+  they exist (the slapd.conf-with-RFC-references habit,
+  generalized)
+- Adaptation is uncommenting, never authoring. Precedent:
+  sshd_config commented-defaults style
+
+Scenario documentation ships as commented walkthroughs (the
+university, the AD-proxy shop, the multi-tenant host), each
+showing the handful of lines that deviate from default and the
+prose reasoning why only those. If any scenario requires more
+than a screenful of uncommented lines, that scenario is a bug
+report against the defaults, per the compensating-tooling
+principle.
+
+Schema is not config: the RFC set is compiled in, include does
+not exist as a directive, and extensions arrive through
+`ldapctl schema add`, typed and validated. The config file
+configures the server; it never loads code or schema from paths.
+
+
