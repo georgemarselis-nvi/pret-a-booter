@@ -732,6 +732,37 @@ Traps:
       1.3.6.1.4.1.4203.1.11.3   WhoAmI (harmless, read)
   Check rootDSE supportedExtension for what your build ships
 
+## idletimeout / threads: global connection + worker settings
+
+    idletimeout 300      # seconds; default 0 = never reap.
+                         # Set it: abandoned connections hold an
+                         # fd and an MDB reader slot (leaked read
+                         # txns block page reclamation). Clients
+                         # (SSSD etc.) reconnect transparently
+    threads 16           # worker pool; default 16. Tune only on
+                         # big multi-socket iron, not on a VM
+
+## slapadd: offline bulk load
+
+slapd must be STOPPED (writes storage files directly; no lock
+protects against a live server: silent corruption).
+
+    systemctl stop slapd
+    sudo -u openldap slapadd -b 'dc=demo,dc=net' -l demo.ldif
+    systemctl start slapd
+
+- -b selects target database by suffix; -n by stanza position
+  (0 = config/frontend). Prefer -b: survives conf reordering;
+  verify numbering with slaptest, never arithmetic
+- run as the slapd user or chown -R openldap:openldap after:
+  root-owned data.mdb = slapd fails to start
+- -q skips consistency checks: only on LDIF from a consistent
+  slapcat export
+- online alternative for live systems: ldapadd through the
+  server (slow: one txn per entry; no batching exists)
+- input from slapcat keeps operational attrs (entryUUID,
+  entryCSN): correct for restore; strip them for ldapadd
+
 ## MDB backend options (database mdb section)
 
 The only backend since 2.5 (BDB/HDB removed). Book examples saying
