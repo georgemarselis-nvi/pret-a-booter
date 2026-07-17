@@ -1224,3 +1224,35 @@ Limits:
 
 Pair with refint conceptually: the two invariant overlays; both
 default off, both enumerated rather than schema-derived.
+
+
+## cn=config / OLC: the other configuration mode (we do not use it)
+
+The alternative to slapd.conf: configuration stored AS a DIT under
+suffix cn=config, editable over LDAP, applied live. Debian default
+for new installs (/etc/ldap/slapd.d/ full of generated LDIF). The
+two modes are mutually exclusive; we run slapd.conf file mode
+(SLAPD_CONF=/etc/ldap/slapd.conf, custom systemd unit).
+
+OLC = OpenLDAP Configuration: every directive becomes an olc*
+attribute (suffix -> olcSuffix, access -> olcAccess, sizelimit ->
+olcSizeLimit). Databases are entries: olcDatabase={1}mdb,cn=config;
+overlays are child entries; {n} prefixes encode ordering.
+
+Why it exists (the legitimate motives):
+1. no restarts: changes apply live (slapd.conf needs restart)
+2. remote config over the wire, same protocol as data
+3. cn=config itself can be syncrepl-replicated across a fleet
+4. ACL-guarded delegated config edits; validation at write time
+   instead of parse-error-at-restart
+
+Why we stay on slapd.conf:
+- olc attribute names and {n} ordering indexes are folklore
+- hand-editing slapd.d files corrupts checksums
+- half the ecosystem documentation assumes the other mode
+- Ansible + slaptest covers motives 1-3 at our scale: config as
+  code in git beats config in database when one person owns three
+  servers
+
+Do not edit /etc/ldap/slapd.d by hand on any cn=config system:
+use ldapmodify against cn=config or convert to file mode.
