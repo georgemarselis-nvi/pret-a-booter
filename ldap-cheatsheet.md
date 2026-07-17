@@ -732,6 +732,79 @@ Traps:
       1.3.6.1.4.1.4203.1.11.3   WhoAmI (harmless, read)
   Check rootDSE supportedExtension for what your build ships
 
+## MDB backend options (database mdb section)
+
+The only backend since 2.5 (BDB/HDB removed). Book examples saying
+`database hdb` translate to `database mdb`; all cachesize /
+idlcachesize / DB_CONFIG material has NO equivalent: the mmap is
+the cache, the OS page cache does eviction.
+
+    database mdb
+    maxsize 10737418240      # map size ceiling, bytes. THE setting.
+                             # default 10MB = too small. Sparse: no
+                             # upfront disk cost, set generously
+    checkpoint 1024 30       # flush cadence: kbytes, minutes.
+                             # matters mainly with nosync-family flags
+    envflags nosync          # durability/perf trades: nosync,
+                             # nometasync, writemap, mapasync,
+                             # nordahead. Crash loses last commits,
+                             # never corrupts (COW B-tree, no WAL,
+                             # no db_recover ritual)
+    maxreaders 126           # concurrent read slots, rarely touched
+    # multival <attr> <hi>,<lo>   # 2.5+: huge many-valued attrs to
+                                  # a sub-database
+
+Files: data.mdb + lock.mdb per database directory. data.mdb is
+SPARSE: ls -l shows maxsize, du shows truth. Copy with
+cp --sparse=always / tar -S or the copy inflates to full maxsize.
+Backup = slapcat export (or mdb_copy), never raw file copy of a
+live map.
+
+Index changes: new `index` directives need offline slapindex for
+existing entries (see slapindex entry); new writes index
+automatically.
+
+## slapindex: rebuild indexes (OFFLINE only)
+
+Adding/changing an `index` directive does not index existing
+entries. slapd must be STOPPED (or you corrupt the database:
+no lock protects against a live server).
+
+    systemctl stop slapd
+    sudo -u openldap slapindex -q            # all indexes
+    sudo -u openldap slapindex -q sn member  # named attrs only
+    systemctl start slapd
+
+- attribute selection has existed for many versions: the book's
+  comment-out-other-indexes dance is obsolete
+- -q skips consistency checks: acceptable on a database that was
+  consistent at shutdown; see the no--q design note for why ldap4
+  refuses the pattern
+- run as the slapd user (or chown -R openldap:openldap after):
+  root-owned data.mdb/lock.mdb = slapd fails to start. Same trap
+  after sudo slapadd
+
+## timelimit / sizelimit: global defaults (before any database)
+
+Fossil defaults: timelimit 3600, sizelimit 500. A query running
+an hour on MDB is broken or hostile; set modern values.
+
+    timelimit time.soft=30 time.hard=120
+    sizelimit size.soft=500 size.hard=2000 size.unchecked=50000
+
+- soft: applies when the client requests nothing
+- hard: ceiling; client-requested limits are honored only below it
+- size.unchecked: cap on candidates EXAMINED (index estimate);
+  exceeding refuses the search (adminLimitExceeded) instead of
+  running it. The only pre-execution cost bound slapd has
+- timer starts at EXECUTION, not arrival: queue wait on a
+  saturated server is not counted (timelimit is not an
+  end-to-end deadline)
+- rootdn is exempt from all limits
+- per-identity overrides: see the limits entry
+- slapd has no ops/sec rate limiting at all: conn_max_pending +
+  nftables in front is the real-world answer
+
 # Overlays
 
 An overlay is a module that registers hooks around directory
@@ -850,6 +923,27 @@ overlays); removed from modern OpenLDAP, no slapo-denyop(5) in
 directive does the same job and survives (see restrict entry,
 including the extended-op blocklist hole). If found in old
 configs: replace with restrict.
+
+## dyngroup: slapo-dyngroup(5): superseded
+
+Compare-only dynamic groups: intercepts COMPARE ("is X a member?")
+and answers by evaluating a filter. Never expands membership in
+search results: read the group, see no members. Superseded by
+dynlist (next entry), which does actual expansion plus memberOf
+emulation. Historical; do not deploy new.
+
+## rwm: slapo-rwm(5): entry deferred to FEIDE lab
+
+The DN/attribute rewriting overlay for back-ldap proxying: our
+FEIDE keystone. Two engines: rwm-map (static attr/objectClass
+renames, '*' drops unmapped) and rwm-rewrite* (POSIX ERE rules
+per rewrite context: bindDN, searchFilter, searchEntryDN, ...).
+Trap: rewrite BOTH directions (request toward AD, results toward
+us): separate contexts each way.
+
+Real docs: slapo-rwm(5) + slapd-ldap(5). The Packt book does not
+cover it. This entry gets filled with TESTED rules during the
+FEIDE lab phase, not prophecy.
 
 ## dynlist: slapo-dynlist(5)
 
