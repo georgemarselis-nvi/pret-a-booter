@@ -47,6 +47,21 @@
         slapd_pre_state.status.ActiveState != "active" and
         (slapd_pre_start is failed or slapd_pre_start.status.ActiveState != "active")
 
+    # --------------------------------------------------------------
+    # 2. Provision database directories slapd will not create itself.
+    #    slapd fails at startup (mdb_db_open) if a database directory
+    #    is missing. The accesslog backend (suffix cn=log) lives in
+    #    its own directory alongside the main DB.
+    # --------------------------------------------------------------
+    - name: Create accesslog database directory
+      ansible.builtin.file:
+        path: /var/lib/ldap/accesslog
+        state: directory
+        owner: openldap
+        group: openldap
+        mode: '0750'
+      become: true
+
     - name: Backup slapd.conf
       ansible.builtin.copy:
         src: /etc/ldap/slapd.conf
@@ -104,7 +119,7 @@
       become: true
 
     # --------------------------------------------------------------
-    # 2. Force the handler to fire here so the TLS check below runs
+    # 3. Force the handler to fire here so the TLS check below runs
     #    against the actually-restarted service.
     # --------------------------------------------------------------
     - name: Flush handlers to apply restart before TLS check
@@ -121,7 +136,7 @@
       when: slapd_post_state.status.ActiveState != "active"
 
     # --------------------------------------------------------------
-    # 3. GnuTLS handshake check against port 636.
+    # 4. GnuTLS handshake check against port 636.
     #    gnutls-utils must already be installed on the control node.
     #    gnutls-cli prints its handshake summary to stderr, not
     #    stdout, when run non-interactively -- rc is the only
