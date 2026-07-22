@@ -80,8 +80,12 @@
         mode: '0640'
       become: true
       notify: Restart slapd
+    # slaptest without -u opens every database and fails on a freshly
+    # provisioned, still-empty mdb directory: data.mdb is created by
+    # slapd at startup, not by slaptest. -u validates config syntax
+    # without opening databases -- the correct gate semantics.
     - name: Validate slapd.conf
-      ansible.builtin.command: /usr/sbin/slaptest -v -f /etc/ldap/slapd.conf
+      ansible.builtin.command: /usr/sbin/slaptest -v -u -f /etc/ldap/slapd.conf
       register: slaptest
       changed_when: false
       failed_when: false
