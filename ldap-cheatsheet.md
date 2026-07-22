@@ -1256,3 +1256,48 @@ Why we stay on slapd.conf:
 
 Do not edit /etc/ldap/slapd.d by hand on any cn=config system:
 use ldapmodify against cn=config or convert to file mode.
+
+## NVI OID arc: 1.3.6.1.4.1.60872 (IANA PEN)
+
+### Convention A: structured (OpenLDAP Admin Guide style)
+
+| OID                       | Purpose                        | Macro     |
+|---------------------------|--------------------------------|-----------|
+| 1.3.6.1.4.1.60872         | NVI root arc                   | `NVIRoot` |
+| 1.3.6.1.4.1.60872.1       | SNMP / MIB (unused, reserved)  |           |
+| 1.3.6.1.4.1.60872.2       | LDAP elements                  | `NVILDAP` |
+| 1.3.6.1.4.1.60872.2.1     | LDAP syntaxes                  |           |
+| 1.3.6.1.4.1.60872.2.2     | matching rules                 |           |
+| 1.3.6.1.4.1.60872.2.3     | attribute types                | `NVIAttr` |
+| 1.3.6.1.4.1.60872.2.4     | object classes                 | `NVIOC`   |
+
+### Convention B: flat (book p283 style)
+
+| OID                       | Purpose                        | Macro     |
+|---------------------------|--------------------------------|-----------|
+| 1.3.6.1.4.1.60872         | NVI root arc                   | `NVIRoot` |
+| 1.3.6.1.4.1.60872.1       | attribute types                | `NVIAttr` |
+| 1.3.6.1.4.1.60872.2       | object classes                 | `NVIOC`   |
+
+### Macro definitions (slapd.conf)
+
+| Convention | Directives                                                                                                                                                      |
+|------------|-----------------------------------------------------------------------------------------------------------------------------------------------------------------|
+| A          | `objectidentifier NVIRoot 1.3.6.1.4.1.60872` / `objectidentifier NVILDAP NVIRoot:2` / `objectidentifier NVIAttr NVILDAP:3` / `objectidentifier NVIOC NVILDAP:4` |
+| B          | `objectidentifier NVIRoot 1.3.6.1.4.1.60872` / `objectidentifier NVIAttr NVIRoot:1` / `objectidentifier NVIOC NVIRoot:2`                                        |
+
+Usage either way: `NVIAttr:1`, `NVIAttr:2`, ... `NVIOC:1`, `NVIOC:2`, ...
+
+## objectidentifier colon syntax (slapd.conf schema authoring)
+
+`alias:n` expands to `<aliased OID>.n` at parse time.
+
+| Written     | Expands to (Convention B)  |
+|-------------|----------------------------|
+| `NVIAttr:1` | 1.3.6.1.4.1.60872.1.1      |
+| `NVIOC:2`   | 1.3.6.1.4.1.60872.2.2      |
+
+Authoring is identical under either convention: the macros absorb the
+structure; you write alias + running integer only. slapd-only sugar:
+expanded at parse time, never on the wire, not portable to other
+servers' schema files.
