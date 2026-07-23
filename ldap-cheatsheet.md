@@ -1340,3 +1340,34 @@ Notes:
   are one-way)
 
 
+## ppolicy directives (slapd.conf): slapo-ppolicy(5)
+
+    overlay         ppolicy
+    ppolicy_default "cn=Standard,ou=Policies,dc=marsel,dc=is"
+    ppolicy_use_lockout
+    ppolicy_hash_cleartext
+
+Three overlay directives only:
+- ppolicy_default <DN>   : default pwdPolicy entry, applied when a user
+                           has no pwdPolicySubentry of their own
+- ppolicy_use_lockout    : return specific lockout error/wait-time to
+                           client instead of generic invalid-credentials
+- ppolicy_hash_cleartext : hash cleartext passwords submitted via modify
+
+CRITICAL: ppolicy_default is a bare DN reference. No default policy
+ships with OpenLDAP. The DN must exist before slapd starts, or ppolicy
+errors at first bind (missing default DN). Provisioning is manual,
+two-step:
+
+1. ou=Policies container (organizationalUnit)
+2. cn=Standard entry: objectClass device + pwdPolicy (auxiliary, needs
+   a structural class riding along), values authored by you:
+   pwdFailureCountInterval, pwdMustChange, pwdAllowUserChange,
+   pwdSafeModify, pwdMaxAge, pwdMaxFailure, pwdInHistory,
+   pwdMinLength, etc.
+
+Per-user override: set pwdPolicySubentry on the user's own entry,
+pointing at a different pwdPolicy DN. No catalog of named policies
+exists; any additional policy is just another entry you author.
+
+Irrelevant under FEIDE/back-ldap (AD owns lockout/expiry)
