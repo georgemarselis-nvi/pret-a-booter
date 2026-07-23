@@ -1301,3 +1301,11 @@ Authoring is identical under either convention: the macros absorb the
 structure; you write alias + running integer only. slapd-only sugar:
 expanded at parse time, never on the wire, not portable to other
 servers' schema files.
+
+## slapd.conf comment rules
+
+Comments are LINE comments only: `#` must be the first non-blank
+character of the line. A trailing `#` after a directive is NOT a
+comment: it is parsed as a token of the directive and errors out
+(e.g. `<security> unknown factor #`). No end-of-line comments,
+ever, anywhere in slapd.conf.
