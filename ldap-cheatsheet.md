@@ -1309,3 +1309,34 @@ character of the line. A trailing `#` after a directive is NOT a
 comment: it is parsed as a token of the directive and errors out
 (e.g. `<security> unknown factor #`). No end-of-line comments,
 ever, anywhere in slapd.conf.
+
+## {ARGON2} password scheme: slappw-argon2(5)
+
+Debian: apt install slapd-contrib. Book-era {SSHA} is fast-hash,
+GPU fodder; argon2 is the memory-hard KDF (PHC winner, RFC 9106).
+
+    # slapd.conf, global section
+    moduleload      pw-argon2
+    # hash used by RFC 3062 Password Modify (ldappasswd path)
+    password-hash   {ARGON2}
+
+Generate a hash (module must be loaded on the CLI too):
+
+    slappasswd -o module-load=pw-argon2 -h {ARGON2} -s secret
+
+Value format (crypt-style, self-describing: variant, params, salt):
+
+    {ARGON2}$argon2id$v=19$m=65536,t=3,p=4$<salt-b64>$<hash-b64>
+
+Notes:
+- verify module name on trixie: pw-argon2 vs argon2 (ls /usr/lib/ldap/pw-*)
+- module defaults may produce argon2i; prefer argon2id, set m/t/p
+  explicitly via module-load="pw-argon2 <params>"
+- password-hash only affects Password Modify ops; values written
+  directly into userPassword via ldapmodify keep whatever scheme
+  the client baked in: another argument for one-scheme (ldap4)
+- existing {SSHA} values keep verifying; rehash happens per-user at
+  next password change, not fleet-wide (no offline rehash: hashes
+  are one-way)
+
+
