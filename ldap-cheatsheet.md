@@ -1410,3 +1410,24 @@ certificate infrastructure. PMI survives in defense, government ID schemes and s
 national eID systems where cryptographically verifiable, offline-checkable privilege
 claims justify the cost. Everyone else gets memberOf and moves on.
 
+## ppolicy testing: slapo-ppolicy(5), Mastering OpenLDAP p.330-331
+
+Binding as rootdn bypasses ppolicy entirely: all tests must bind as a
+uid-level entry. With pwdSafeModify TRUE:
+
+- ldapmodify replace: userPassword FAILS with err=50 (Insufficient
+  access, "Must supply old password"). By design: ldapmodify cannot
+  carry the old password.
+- ldappasswd -s <new> -a <old> succeeds: it uses the Password Modify
+  extended operation (RFC 3062), which carries both.
+
+Quality checks (pwdCheckQuality 1 + pwdMinLength N) reject short
+passwords at the extended op with err=19 (Constraint violation),
+message deliberately vague ("Password fails quality checking policy").
+
+Expiry: pwdMaxAge seconds until expiry, pwdExpireWarning seconds
+before expiry during which binds log/return a warning
+(ppolicy_bind: Setting warning for password expiry ... = N seconds).
+
+Rootdn can set any user password without the old one even under
+pwdSafeModify: the escape hatch for lockouts and provisioning.
