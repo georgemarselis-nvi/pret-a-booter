@@ -1,0 +1,10 @@
+# ppolicy-remove.ldif
+# Removes the ppolicy lab entries from dc=marsel,dc=is.
+# Children before parents: LDAP delete is not recursive.
+# Apply: ldapmodify -x -y ~/.ldappasswd -f ppolicy-remove.ldif
+
+dn: cn=Standard,ou=Policies,dc=marsel,dc=is
+changetype: delete
+
+dn: ou=Policies,dc=marsel,dc=is
+changetype: delete
