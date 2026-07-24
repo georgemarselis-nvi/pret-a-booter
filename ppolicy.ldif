@@ -1,0 +1,15 @@
+dn: ou=Policies,dc=marsel,dc=is
+objectClass: organizationalUnit
+ou: Policies
+
+dn: cn=Standard,ou=Policies,dc=marsel,dc=is
+objectClass: device
+objectClass: pwdPolicy
+cn: Standard
+pwdAttribute: userPassword
+pwdMaxFailure: 5
+pwdFailureCountInterval: 1200
+pwdLockout: TRUE
+pwdMustChange: TRUE
+pwdAllowUserChange: TRUE
+pwdSafeModify: TRUE
