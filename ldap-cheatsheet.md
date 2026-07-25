@@ -1431,3 +1431,37 @@ before expiry during which binds log/return a warning
 
 Rootdn can set any user password without the old one even under
 pwdSafeModify: the escape hatch for lockouts and provisioning.
+
+### accesslog + ppolicy: passmod crashes slapd under logops all
+
+Verified live 2026-07-25, slapd 2.6.10+dfsg-1 (Debian 13), crashed
+twice before diagnosis. Unfixed on OPENLDAP_REL_ENG_2_6 head as of
+same date.
+
+Mechanism: the RFC 3062 Password Modify exop performs an internal
+userPassword modify, which queues a CSN on the parent op. accesslog
+logs the internal modify (writes class, fine), then logs the extended
+op wrapper still carrying that CSN. In accesslog_response
+(accesslog.c ~1623) a CSN-bearing op outside LOG_OP_WRITES hits
+assert(0): the developers chose crash over silently corrupt CSN
+ordering (see ITS#9538 for the ordering gap behind it). Debian builds
+enable assertions, so: SIGABRT, daemon dead, on every password change.
+
+Failure signature in the journal:
+
+    slapd: ...accesslog.c:1623: accesslog_response: Assertion `0' failed.
+    conn=N op=M accesslog_response: the op had a CSN assigned, if
+    you're replicating the accesslog at (null), you might lose changes
+    slapd.service: Main process exited, code=killed, status=6/ABRT
+
+Notes:
+- The internal modify commits BEFORE the abort: the password change
+  survives the crash. Verify with ldapwhoami using the new password
+  after restart.
+- Fix: logops writes (add/modify/modrdn/delete). This is also what
+  delta-sync replication requires. Any logops set including extended
+  ops plus ppolicy equals a one-command denial of service against
+  your own server.
+- Regression test after the flip: rootdn ldappasswd -s against any
+  user is itself a passmod exop; Success (0) plus surviving slapd
+  proves the fix.
