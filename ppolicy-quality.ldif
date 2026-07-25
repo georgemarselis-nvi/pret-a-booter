@@ -1,0 +1,14 @@
+# ppolicy-quality.ldif
+# Adds password quality enforcement to the default policy on
+# dc=marsel,dc=is. pwdCheckQuality 1: check when possible, accept
+# hashed values the server cannot inspect (2 would reject those).
+# pwdMinLength 7: matches the lab password convention (1234567).
+# Apply: ldapmodify -x -y ~/.ldappasswd -f ppolicy-quality.ldif
+
+dn: cn=Standard,ou=Policies,dc=marsel,dc=is
+changetype: modify
+add: pwdCheckQuality
+pwdCheckQuality: 1
+-
+add: pwdMinLength
+pwdMinLength: 7
