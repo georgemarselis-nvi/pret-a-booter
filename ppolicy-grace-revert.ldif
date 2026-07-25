@@ -1,0 +1,9 @@
+# ppolicy-grace-revert.ldif
+# Removes grace logins from the default policy, restoring
+# instant-lock-on-expiry. Counterpart to ppolicy-grace.ldif.
+# NOT APPLIED, repo reference only.
+# Apply: ldapmodify -x -y ~/.ldappasswd -f ppolicy-grace-revert.ldif
+
+dn: cn=Standard,ou=Policies,dc=marsel,dc=is
+changetype: modify
+delete: pwdGraceAuthNLimit

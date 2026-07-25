@@ -1,0 +1,10 @@
+# ppolicy-expiry-test-revert.ldif
+# Removes the 600/540 test expiry values from the default policy,
+# restoring no-expiry. Counterpart to ppolicy-expiry-test.ldif.
+# Apply: ldapmodify -x -y ~/.ldappasswd -f ppolicy-expiry-test-revert.ldif
+
+dn: cn=Standard,ou=Policies,dc=marsel,dc=is
+changetype: modify
+delete: pwdMaxAge
+-
+delete: pwdExpireWarning

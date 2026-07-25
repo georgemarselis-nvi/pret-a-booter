@@ -1,0 +1,12 @@
+# ppolicy-grace.ldif
+# Adds grace logins to the default policy: 3 post-expiry binds allowed,
+# each one appending a pwdGraceUseTime value to the user entry; the
+# value count is the counter. At the limit the account hard-locks
+# (err=49, rootdn rescue only). Absent pwdGraceAuthNLimit means ZERO
+# graces: expiry locks instantly. NOT APPLIED, repo reference only.
+# Apply: ldapmodify -x -y ~/.ldappasswd -f ppolicy-grace.ldif
+
+dn: cn=Standard,ou=Policies,dc=marsel,dc=is
+changetype: modify
+add: pwdGraceAuthNLimit
+pwdGraceAuthNLimit: 3
