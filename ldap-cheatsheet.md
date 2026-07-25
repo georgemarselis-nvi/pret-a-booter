@@ -1465,3 +1465,20 @@ Notes:
 - Regression test after the flip: rootdn ldappasswd -s against any
   user is itself a passmod exop; Success (0) plus surviving slapd
   proves the fix.
+
+## OID arc branch numbering: OpenLDAP Foundation convention template
+
+Standard sub-branch numbering under any organization base OID; copy
+this instead of inventing your own layout.
+
+    <base>.1   LDAP syntaxes
+    <base>.2   Matching rules
+    <base>.3   Attribute types
+    <base>.4   Object classes
+    <base>.5   Supported features
+    <base>.9   Protocol mechanisms
+    <base>.10  Controls
+    <base>.11  Extended operations
+
+Gaps (6-8) are unassigned in the convention; leave them unassigned.
+Most schema work touches only .3 and .4.
