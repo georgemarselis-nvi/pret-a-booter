@@ -1,0 +1,13 @@
+# ppolicy-expiry-test.ldif
+# TEST VALUES ONLY: 10-minute password expiry, warning window covering
+# the final 9 minutes. Absurd for production, sized for watching the
+# warning fire within one lab session. Revert after testing.
+# Apply: ldapmodify -x -y ~/.ldappasswd -f ppolicy-expiry-test.ldif
+
+dn: cn=Standard,ou=Policies,dc=marsel,dc=is
+changetype: modify
+add: pwdMaxAge
+pwdMaxAge: 600
+-
+add: pwdExpireWarning
+pwdExpireWarning: 540
