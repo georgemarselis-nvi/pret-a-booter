@@ -2573,3 +2573,41 @@ checklist.
 8. What, if anything, of the site-weight policy layer above raft gets built
    versus solved by voter placement plus sharding.
 9. Item 12: the pitch, still unwritten.
+
+Everything banked since the chapter 7 design document was produced, in order:
+
+**Application interface (the nssng arc):**
+- No application speaks LDAP. AuthN and posix identity go through the OS (PAM/NSS); the ldap4 modules are where directory awareness ends
+- Tier two for rich queries: a small named-facts library (nssng working name), no raw filter passthrough, `ldapq` as the human face of the same surface. API design deferred to December
+- NSS may eventually adopt the fact-lookup mechanism; the vocabulary stays data, never ABI
+
+**Identity:**
+- UUID is canonical identity; posix uid/gid is a cluster-allocated 32-bit projection bound to it. Translation layer designed in December; SSSD idmap as cautionary reference, not model
+- Local-account adoption offered at cluster genesis and as an `ldapctl` verb later; collision detection at bind time; system range 0-999 never directory-managed
+- Stable uid/gid across the cluster; allocation is consensus-ordered with a declared range
+
+**URLs:**
+- ldap4 URLs are addresses only, HTTP-style: verbs live in the protocol operation or `ldapctl` command. Dereference has no side effects, ever
+
+**Discovery and topology:**
+- The server root is a real tree node; capabilities, schema, naming contexts are genuine children, recursable by ordinary subtree search. Supersedes the parked rootDSE-replacement item. Connect-time version negotiation (item 35) stays separate
+- DNS is a hard prerequisite. Discovery is SRV only, no config-file server list. Break-glass direct address via `ldapctl --server` as explicit override
+
+**Configuration:**
+- The dividing line is "does it replicate": directory config (ACLs, schema, replication membership) lives in the tree as a real subtree; server operation (binds, listeners, process resources) is local and readable with the directory down
+
+**Storage and backup:**
+- Format versioned and migratable, never frozen. N-1 in-place read floor; migration tool reads all prior generations in one hop (the pg_upgrade property); refusal always loud and version-named; silent corruption structurally impossible
+- Snapshots carry a format-generation header and share one migration path with in-place upgrades; backup and learner-join share one snapshot mechanism
+- LDIF via ldapexport is the eternal archive format; release artifacts vendor dependencies as documented last resort
+- December: ldapexport per-record hashes plus chained file hash; canonicalisation is the prerequisite
+
+**Privilege:**
+- Root exists for one act, the privileged bind, delegated to systemd socket activation; the server binary never runs as root. Everything else unprivileged by construction. December for the full model
+
+**Extension points:**
+- No execute-my-script backend, ever (the back-perl lesson). Compatibility is for other people's systems; the import pipeline is for escaping your own broken ones once, not wearing them
+
+Plus the Exchange/GAL address-book note folded into the AD-compat scope, and the standing observation that mod_authnz_ldap and the whole chapter 8 apparatus is what tier one deletes.
+
+That is the state. Next conversation gets these merged into the design document proper.
