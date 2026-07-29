@@ -1662,4 +1662,914 @@ not exist as a directive, and extensions arrive through
 `ldapctl schema add`, typed and validated. The config file
 configures the server; it never loads code or schema from paths.
 
+# ldap4 Design Notes: Chapter 7 Harvest
 
+Source: parking lot items 1-35, banked while reading "Mastering OpenLDAP"
+chapter 7 (Multiple Directories), Parts 9 and 10, plus replication and
+proxying material carried from Parts 7 and 8.
+
+Organised thematically. Item numbers retained as anchors.
+
+Provenance note: items 1-26 were banked during the Part 9 replication
+reading. The full discussion text of that session is not retrievable from
+past-chat search (the session is indexed as a summary covering only the
+ppolicy pages), so those items are expanded here from the handoff headlines,
+the recovered Part 7 and Part 8 material, and this session's continuations.
+Where an item's expansion is reconstruction rather than recovered text, the
+design intent is preserved; the exact original wording is not.
+
+---
+
+## 1. Framing
+
+The recurring design smells in LDAP, NIS, NFS and Kerberos are not
+independent mistakes. They are the seams left by a single 1980s
+networked-Unix project that was federated into four separate standards by
+hardware limits and inter-vendor politics: Sun against OSI against MIT.
+
+Each of the four stores fragments meant for a neighbour. LDAP holds NFS
+automount strings and NIS posixAccount numbers. RFC 2307 is NIS expressed
+in LDAP. Kerberos assumes DNS and a directory. NFS trusts asserted uids.
+The trust between them is unvalidated convention.
+
+Removing those seams by unifying identity, authentication and directory
+into one coherent system is the point of ldap4. Home directories and
+mount points are facts the directory STATES, not configuration it STORES
+(items 24 and 25 below are the concrete instances).
+
+**Item 26: build method.** Clean-room from the RFCs. Own test suite.
+slapd used as a black-box oracle for behavioural comparison, never as a
+source of code.
+
+---
+
+## 2. Cluster model
+
+**Item 1: one node class.** No masters, no slaves, no shadow servers, no
+provider and consumer as node types. Every node runs the same binary. Role
+is a runtime state, not an installation decision. The slapd world where a
+consumer is configured differently from a provider, and converting one into
+the other means editing configs on five boxes, does not exist here.
+
+**Item 2: atomic cluster writes.** Writes are consensus-ordered across the
+cluster. Raft. Not eventual convergence with conflict resolution bolted on,
+and specifically not OpenLDAP's CSN last-writer-wins, which can silently eat
+writes. The Part 7 position stands underneath this: directory workloads are
+overwhelmingly reads; multi-master buys write availability at the cost of
+silent divergence, and silent conflicts are corruption while write downtime
+is an inconvenience. Consensus ordering is the multi-node form of the
+single-writer principle.
+
+**Item 7: node identity is not a replication user.** A node authenticates as
+a node, with a node credential. It does not bind as `uid=replicator` the way
+a syncrepl consumer does. Replication identity in slapd is an ordinary user
+entry with extraordinary read rights and a `limits` exemption, which means
+the most powerful read credential in the deployment is a password in a
+config file. In ldap4 the replication channel rides node identity, which is
+part of the cluster trust fabric rather than the user database.
+
+**Item 23: three-layer identity.** Cluster UUID, node incarnation, node
+credential. The cluster UUID says which cluster this is. The incarnation
+says which instance of this node this is, so a rebuilt node is
+distinguishable from its predecessor. The credential authenticates it.
+Distinct concerns, never collapsed into one value.
+
+**Item 19: lifecycle.** Staged cold start: nodes come up in a declared
+order, not a thundering herd racing for election. Cascade fan-out for large
+clusters: a joining node syncs from a nearby member, not necessarily the
+leader, so a hundred joins do not serialise on one box. Genesis is asserted,
+never inferred: the first node of a cluster is told it is genesis by the
+operator; no node ever concludes from silence that it must be first, because
+silence is what a partition looks like. No re-initialisation of an existing
+node: destroy it and join a fresh one, so there is never a node whose
+history is ambiguous.
+
+**Item 22: no cluster-destroy verb.** A node can be destroyed:
+`decommission` exists and the Ansible playbook for it is queued. The cluster
+cannot be destroyed by a verb, because there is no single actor entitled to
+that decision and no operational story that requires it. A cluster ends by
+its last node being decommissioned, deliberately, one at a time.
+
+**Item 16: learner nodes.** Join by snapshot plus tail: full state transfer
+at a point in the log, then replay from that index. A learner replicates and
+serves reads but does not vote, so a remote site can hold a node without
+becoming a quorum liability. Admission of learners is DoS-hardened under
+item 17: joining is a privileged operation, not an open door.
+
+**Item 20: sharded consensus.** Many small consensus groups rather than one
+large quorum. Election cost and message fan-out grow with voter count, so
+big flat quorums are both slower and more fragile. Sharding is also the
+lever if a branch site needs local writes: give the branch its own group for
+the subtree it owns.
+
+**v1 operational reality** (carried from Part 7, still true as the
+transition plan). Before raft exists, promotion is operator-driven and
+executes as one guarded command: fence the old provider so it refuses writes
+if reachable, verify the candidate holds the highest log position among
+reachable replicas, flip roles, repoint the remaining replicas. If the old
+provider is unreachable, the operator is asserting "dead, not partitioned,"
+and the command takes an explicit acknowledgment so the human owns the
+split-brain risk. A runbook of manual steps is how split brain happens at
+03:00; one guarded command is safe indefinitely. Raft automates the
+decision; the v1 command survives as the manual override. Item 9's
+promote and demote playbooks are the lab rehearsal of exactly this.
+
+---
+
+## 3. Liveness, partition and demotion
+
+Items 17 and 31, merged. One failure detector with one policy threshold
+drives both flap demotion and partition demotion. Not two mechanisms with
+two sets of tunables. Item 11 already made liveness core rather than an
+add-on; this is that core's specification.
+
+**Core rule.** A node that cannot reach quorum demotes ITSELF to read-only.
+It never demotes anyone else. Demotion of another node is a decision only a
+side that already holds quorum may make, and the quorum side initiates
+resync of returning nodes.
+
+This is the property that prevents split brain. From ping failure alone a
+node cannot distinguish a dead peer from an unreachable one, so a rule that
+lets any node demote any other forks the cluster: each side demotes the
+other and both keep writing.
+
+**Flap demotion** (item 17's original half): a node that oscillates,
+reachable then not then reachable, is demoted by the quorum side using the
+same detector and threshold, because a flapping voter is worse than an
+absent one. Rejoin follows the same resync path as partition recovery.
+
+**Timing.** Election timeout in the 150-300ms range, the standard raft
+band. Resync is a separate and much longer clock: minutes after a long
+partition, because the returning node replays the log it missed. A returning
+node does not vote until resync completes.
+
+**Item 32: leader tiebreak.** The leader holds two votes to break stalemates
+in even-sized voter sets. Scoped to tiebreaking only, not partition
+handling: in a partition the minority cannot see the leader at all, so the
+extra vote is irrelevant there. It also does nothing when the leader itself
+is the node that died, which is the common trigger for elections, so it
+reduces stalemates without removing the odd-voter-count recommendation.
+
+**Placement is a correctness decision.** With two voters at headquarters and
+three at branches, a link cut leaves the branches legitimately holding
+majority and headquarters read-only. Raft does not know headquarters is
+special. `ldapctl` lints for this: warn on even voter counts, and warn when
+voter distribution across sites allows a branch to outvote the primary site.
+If a site must always win, place the voters accordingly, or give it its own
+consensus group under item 20. Site weight as an explicit policy layer above
+raft is possible but is a deliberate later decision, not a default.
+
+### Forced quorum override
+
+An even split, four against four, leaves both sides read-only. That is the
+correct outcome: total write outage, zero divergence, human decides. Failing
+safe rather than failing available. The admin then needs a way to declare
+one side authoritative, and that verb is dangerous enough to need ceremony,
+because running it on both sides simultaneously is exactly how you get the
+split brain the design just avoided.
+
+`resync` is the wrong verb for this case: in a clean even split nothing is
+out of sync, both sides hold identical logs. The verb is a forced quorum
+override, distinct, with its own confirmation and a loud audit entry.
+
+Ceremony required before the override takes effect:
+
+- type a phrase stating the consequence, not "yes": a tired admin types yes
+  without reading
+- visual diff of cluster state and last log index, even in a TUI
+- mandatory reason string written into the audit chain (the Windows Server
+  shutdown-tracker pattern: mandatory on Server SKUs, reason plus comment
+  into the event log, and it works because it forces a sentence rather than
+  a click)
+- forced countdown before effect, with a large visible warning
+- two-person rule optional, deferred until the credential story exists
+  (YubiKey presentation once Kerberos is in)
+
+Two humans acting independently on two sides of a partition is an HR
+problem, not a directory problem, and the design does not try to prevent it.
+It survives it instead, which is what the ceremony's frequency reduction
+plus the dual-marker rule below are for.
+
+**Force markers.** A side that forces quorum writes a permanent hash-chained
+record: which node, which human, which log index, what the state was. The
+marker is evidence. It is never an arbiter.
+
+**Dual force markers on rejoin.** Both sides go read-only. No automatic
+merge. Plain-language log naming both sides, both operators and both
+indices: "two forced quorums detected, side A forced by X at index N, side B
+by Y at index M, writes suspended, do not merge, escalate." `ldapctl`
+reports the divergence: how many entries differ, which subtrees, since which
+index. No verb exists that silently discards one side's writes.
+
+Timestamp arbitration is explicitly rejected. Clocks across a partition are
+exactly what cannot be trusted: skew, NTP dead during the same event that
+caused the partition, drifted VM clocks. Raft uses log indices and terms
+rather than wall clock for this reason. Worse, both sides acknowledged
+writes to clients as durable after forcing; automatic selection is data loss
+by coin flip at the moment two humans have each already made a deliberate
+decision. Reconciliation is the item 21 adopt-versus-merge machinery: a
+human decision, a wizard, warnings.
+
+The 3am answer is: read-only until daylight. Reads keep working throughout.
+Sign-ins continue, the institute functions. Only writes wait for someone who
+can decide which acknowledged writes get thrown away.
+
+---
+
+## 4. Replication and audit
+
+**Item 5: anti-entropy.** Merkle tree comparison anchored at a log index,
+git-style content addressing. Two nodes verify convergence by comparing
+subtree hashes and descend only into branches that differ, so verification
+cost scales with divergence rather than directory size. This is the
+background correctness check that consensus ordering alone does not give
+you: it catches disk-level divergence, bugs, and bit rot, not just missed
+messages. Not CSN vector comparison.
+
+**Item 6: hash-chained audit.** Each audit record carries the hash of its
+predecessor, so the log is tamper-evident by construction: truncation or
+modification breaks the chain visibly. The force markers in section 3 write
+into this chain. The Part 8 decisions carry forward underneath: the log
+store inherits the primary database's ACL, no secrets in logs, audit format
+is core with mandatory actor, outcome and timestamps, and `ldapq` can replay
+operations from audit records.
+
+**Change feed as core.** Not an optional overlay. One mechanism serves
+audit, delta replication and downstream consumers. This is the accesslog
+plus delta-syncrepl idea from the book, promoted from clever overlay
+composition to the native architecture: slapd got it right by accident, as
+two overlays that happen to compose; ldap4 makes it the spine.
+
+**Item 8: build order and strategy.** Syncrepl provider first. The strangler
+pattern against slapd: ldap4's first deployable role is being the provider a
+stock slapd consumer replicates from. Existing deployments point their
+consumers at it, nothing on the consumer side changes, and the replacement
+proceeds inward from there. This dictates build order: the sync protocol
+surface comes before almost everything else, because it is the on-ramp.
+
+**CSN as a compatibility shim.** CSNs exist only at the slapd-facing
+boundary, generated for consumers that need them. Internally there are log
+indices and terms. No internal concept depends on wall-clock-derived change
+numbers.
+
+**Item 15: bulk operations as wire primitives.** One transaction covering
+many entries rather than one round trip per entry. This is simultaneously
+the migration-speed lever, the write-throughput lever (write cost is fsync
+latency and batching amortises it, section 15), and the reason
+`ldapimport` can be fast without a side-door like slapadd that bypasses the
+running server.
+
+**Item 13: every node validates.** No node accepts data on the assumption
+that an upstream already checked it. Replicated writes pass the same schema
+validation as client writes. The slapd counterexample is slapadd loading
+entries no ACL and no schema check ever saw; that class of side door does
+not exist (Part 3 decision, reaffirmed).
+
+**Item 3: no referral-as-signal.** Referrals as a replication and topology
+mechanism are out: the updateref pattern, where a read-only replica answers
+a write with "go ask that server over there," pushes topology knowledge into
+every client and trusts them all to handle it correctly, which they do not.
+Whether a referral-shaped mechanism exists at all for other purposes is
+still open (the person flagged referrals as potentially useful and needing
+thought); what is decided is that no core mechanism depends on clients
+chasing them, and the router never punts to the client.
+
+**Identity assertion by configuration does not exist** (carried from Part
+7). slapd's chain overlay plus idassert lets a middle box tell the provider
+"I am acting for uid=george" on its own authority: the provider never
+authenticated george, it has the replica's word, and one compromised chain
+credential can act as anyone it may assert. Kerberos solved the same
+delegation need cryptographically with constrained delegation. In ldap4,
+anything acting on a user's behalf carries a real delegation credential or
+acts as its own named identity. The translucent proxy mode in section 7
+operates within this rule.
+
+**Item 4: discovery by DNS SRV**, not by referral chasing and not by
+configured host lists. Same rule already adopted for Kerberos realm
+discovery via `_kerberos._udp`: DNS must exist and be correct, a hard
+prerequisite, same as AD.
+
+---
+
+## 5. Proxying, federation and namespace
+
+**Item 27: one backend per service instance.** Multiple backends means
+multiple service instances with separate configs, relaunched with a
+different config to get a proxy or a secondary backend. This kills the
+suffix-longest-match dispatcher inside one process, kills per-database
+overlay scoping bugs, makes crash blast radius one backend, and matches the
+process-per-tenant isolation model already adopted.
+
+**Item 28: the router.** The cost of item 27 is that nobody gets a unified
+namespace for free, and unified namespace is a requirement because
+federation (forests and trees) is coming. So the router exists, and it is
+designed now rather than retrofitted.
+
+The router is an explicit service holding no data, only a namespace map of
+prefix to backend service. Stateless: no election, no quorum, restart is
+free, run as many as needed. It is deliberately NOT the raft leader. The
+leader is elected for write ordering within one cluster; the router spans
+backends that are different clusters, possibly different forests, and a
+cross-forest namespace has no shared raft group to elect from. Tying routing
+to an election also degrades routing whenever a backend is mid-election.
+Different lifetimes, different failure modes. Keeping the namespace map
+consistent across router instances is versioned config with a stale-map
+error, not consensus.
+
+Router behaviour, decided:
+
+- writes crossing a namespace boundary route to the owner
+- searches spanning backends: fail closed per item 29; any backend
+  unreachable errors the whole search
+- schema validation belongs to the backend: data on a node is that node's
+  or cluster's responsibility (item 13 restated at the boundary)
+- the router never punts to the client with a referral
+
+**Process model.** Single shipped binary, role selected at launch. No zoo of
+separate executables and explicitly no reintroduction of slurpd, the
+separate replication daemon whose death was one of 2.4's best features. The
+router runs as a sub-process under a supervisor that owns lifecycle only: no
+data, no routing decisions, no protocol surface. The supervisor is the same
+binary in supervisor mode. Supervisor restart does not restart children, or
+the isolation win is lost.
+
+Restart of a role is `ldapctl routing restart`, driving the systemd
+instantiated unit rather than a private supervisor IPC, so there is one
+restart path rather than two that can disagree. Management verbs belong to
+`ldapctl`; the server binary does not do management.
+
+---
+
+## 6. Item 30: no caching
+
+No caching mechanisms of any kind.
+
+Reasoning. Payloads are under 100kb per request and response. Storage and
+memory are cheap. A ten thousand person institute produces a few binds per
+second at the morning peak, under three per second even if every person
+signs in within the same hour, which is nothing for a single mdb-class
+backend. The read-volume argument that justifies caching belongs to shops
+running billions of reads, and those shops do not use LDAP for it anyway.
+Designing for their profile is designing for people who are not the users.
+
+Network slowness is not the directory's problem. If a remote is
+unreachable, the mechanisms exist to say "that part over yonder is down."
+Do not paper over it with stale data.
+
+The pcache use case the book presents, a branch surviving WAN problems, is
+answered properly by section 2: the branch holds a real cluster member, a
+learner (item 16) for read availability without quorum liability, or its own
+consensus group (item 20) if it needs local writes. A real replica with real
+consistency, not a stale partial copy with per-template TTLs.
+
+**Negative caching considered and rejected.** It saves a round trip that
+costs nothing, and it introduces the provisioning bug directly on the FEIDE
+path: an account is created in the upstream, a miss cached thirty seconds
+earlier is still live, and the account does not exist until the TTL expires.
+The one genuine benefit, absorbing enumeration attacks, is taken as rate
+limiting under item 17 admission control instead. Rate limiting does not lie
+about what exists.
+
+Implementation note: rate limiting alone does not close enumeration if a
+miss returns measurably faster than a hit. Constant-time existence checks
+are the other half.
+
+**Item 29: fail closed.** A backend unreachable means the search errors
+rather than returning a partial result set. LDAP has no clean wire
+representation for "here are 800 entries, one subtree is missing": the
+candidates are resultCode 4 with the wrong fixed semantics, LDAPv2's
+deprecated partialResults, continuation references (banned with referrals),
+or success plus a diagnosticMessage string no client parses. Every
+approximation either misleads clients or requires universal client support.
+Fail closed is safer, honest, and matches the opinionated-defaults stance.
+Revisit in early iteration if operational experience demands it.
+
+---
+
+## 7. Item 34: translucent mode
+
+Local attribute augmentation is a first-class proxy mode: one proxy type
+that does what slapo-translucent does, natively, with no caching half. This
+is the shape FEIDE needs. Active Directory keeps owning the person, NVI owns
+the norEdu* and eduPerson attributes, and nobody has to ask the Windows team
+to extend the AD schema. Translucent exists precisely because the upstream
+cannot be made to change; "fix your shit" is not available when the shit
+belongs to another team.
+
+Dropping the cache half means the mode is purely "local attributes overlaid
+on remote entries," not a partial replica. What pcache stored, copies of
+remote entries for speed, item 30 already rejected.
+
+**Declared ownership map.** Config states which attributes are local;
+everything else is remote. Not inferred from write patterns or first-writer.
+Consistent with genesis-asserted-never-inferred. Attributes the remote owns
+go remote, attributes only the local side defines go local, and the proxy
+decides by attribute, not by a global write-destination setting.
+
+**Scope constraint (the one-to-one rule).** The same map declares which
+subtree the local store may be written into. Writes outside the declared
+scope are refused regardless of identity. This closes the slapd hole where
+the translucent proxy's rootdn can write local entries under DNs it cannot
+even read remotely, because the local database has no knowledge of the
+remote's ACL decisions and rootdn is exempt from its own.
+
+**No bypass identity.** slapd's rootdn is not "root can override," it is
+"root is not checked": it bypasses ACL evaluation entirely, cannot be
+constrained by `access to` rules, and `limits` do not apply to it. ldap4 has
+no such identity. Administrative privilege is granted, evaluated and logged
+like every other privilege. The ownership map's scope constrains every
+writer without exception, including the most privileged operator credential.
+
+**Break-glass required, design deferred.** The no-bypass position and the
+scope constraint together mean there is no recovery path when the
+authorization data itself is broken, and "the ACL store is corrupt and
+nobody can fix it" is a real 3am scenario. Break-glass is therefore a
+requirement, in tension with no-bypass by construction, and the middle
+ground is what needs designing. Azure's model is the reference: dedicated
+emergency accounts, excluded from conditional access, credentials split and
+stored offline, use triggers alerting, mandatory post-use review.
+Break-glass as an audited event, never a standing privilege.
+
+**Collision.** Remote wins. The proxy is never authoritative. If the remote
+later grows an attribute that was declared local-owned, ownership has
+silently changed hands: log it loudly rather than swallowing it, then update
+the local value from remote or drop the local value.
+
+**Deletion.** If the remote dropped the entry, the local overlay row is
+dropped too, but via deliberate reconciliation, never via incidental absence
+during a request. The proxy cannot see a delete; it sees absence, and
+absence has other causes: remote unreachable, proxy account lost read
+rights, entry moved OU, scope or filter changed. Deleting on incidental
+absence means a transient AD hiccup wipes norEdu* data that exists nowhere
+else. The reconciliation pass runs against a verified-healthy remote
+connection, confirms absence deliberately, tombstones rather than
+hard-deletes, and purges after a retention window.
+
+The hazard that makes this non-optional: DN reuse. If the local row survives
+and the remote later recreates the same DN for a different human, the old
+attributes reattach to the new person. At a research institute with rotating
+staff this will happen.
+
+**Open fork, decide before the FEIDE lab.** Whether local-only attributes
+must be filterable. "Excuse me sir, this is an LDAP, not a Wendy's, we do
+not carry that" works as a fail-closed position, but FEIDE queries exactly
+the attributes that live locally, eduPersonPrincipalName and friends,
+because AD does not hold them. Either local attributes are filterable, or
+they must not be local. One or the other, before the lab phase.
+
+---
+
+## 8. Item 35: protocol strictness
+
+An unknown protocol element or control fails the operation. Not dropped
+silently, not ignored as non-critical. Loud log naming the element. LDAP's
+control-criticality distinction, where a non-critical control may be
+silently ignored, does not exist: everything is critical, because an
+operation half-understood is an operation that should not proceed.
+
+This removes forward compatibility as a wire property, so version
+negotiation is the only path and must be explicit. The mechanism is trivial
+and sshd is the proof: version exchange in the first line, both sides pick.
+What rots in practice is not the version banner but the supported-feature
+sets, which is a policy question about the window, not a protocol complexity
+problem. Support window declared at compile time per client, server
+publishes its own window, intersection computed at connect rather than
+assumed.
+
+**Window policy is admin-configurable**, with a project-level statement that
+LDAPv3 support sunsets five years after ldap4 release.
+
+Sunset does not mean deletion. It means: "if you want an ldap4 that speaks
+ldap3, download this last version; this is your on-ramp to ldap4." The final
+v3-speaking build is pinned, archived and named. It carries the highest test
+burden in the line, tested to the tits, not the lowest, because it is the
+path everyone takes in. Security support terms for that pinned build still
+to be decided, even if the answer is security-only for a fixed term then
+nothing.
+
+No contradiction with `ldapsearch` surviving permanently (item 8 and the
+Part 8 tooling decision): ldapsearch is an alias, a symlink speaking ldap4
+under the hood, there for people with chronic muscle memory. Client-tool
+compatibility is permanent; wire-protocol v3 compatibility is five years.
+The alias is a muscle-memory affordance, not a compatibility surface.
+
+### Extended operations are removed
+
+Carried from Part 7, same reasoning as unknown-control rejection.
+
+LDAP extended operations are opcodes beyond the core nine, identified by OID
+and carrying arbitrary payloads: the escape hatch by which the protocol grew
+without a version bump. ldap4 needs none of the famous ones. StartTLS is
+already crossed out. Password Modify (RFC 3062) dissolves under the
+Kerberos-only stance, since the KDC owns credential changes; it is also the
+op that crashes slapd under ITS#9538 in the lab, a fitting epitaph. WhoAmI
+and cancel become core operations rather than bolt-ons (Part 8: one
+acknowledged cancel, no abandon).
+
+The failure of extended operations was not extensibility in principle. It
+was extensions arriving as opaque blobs that bypass the semantics of the
+core: gates, authorization evaluation and replication. The stated
+consequence: adding an operation later requires a protocol version bump,
+which the version negotiation above is the honest mechanism for.
+
+### Read-only is a storage-unit state
+
+The slapd `readonly` directive gates the modify opcode, so Password Modify
+walks straight through it: a "read-only replica" silently accepts password
+changes that then diverge from the provider. The root error is an
+operation-level gate protecting a data-level invariant; any second opcode
+that mutates data routes around it, and extended operations were an
+open-ended supply of second opcodes.
+
+In ldap4, read-only is a state of the storage unit, enforced where writes
+land rather than where operations enter. No opcode, present or future, can
+route around it. This is what makes the partition self-demotion in section 3
+trustworthy rather than aspirational: when a minority node says it is
+read-only, nothing gets in through a side door.
+
+---
+
+## 9. Item 33: OIDC and OAuth2
+
+FEIDE already integrates primarily via OIDC and SAML, with the LDAP surface
+as what the home organisation exposes for FEIDE to read. A directory that
+cannot speak OIDC needs a separate identity provider bolted alongside, which
+is the 1980s federation problem restated: one more organ with its own store
+and its own trust-by-convention seam.
+
+The hard part is not the token endpoint. An OIDC subject is an opaque
+issuer-plus-sub pair and the DIT wants a DN. Something must own that
+binding, it must be a real DIT entry under the existing rule that any DN
+used for authentication is a validated entry, and it must survive the
+issuer rotating subject identifiers.
+
+Decide early whether ldap4 is the relying party consuming tokens or the
+issuer. Those are different products. Deferred for deliberate thought, not
+for lack of importance: the OIDC/SAML study is on the FEIDE critical path
+regardless.
+
+---
+
+## 10. AD compatibility strategy
+
+Partial AD replacement: the LDAP surface only, for now. Domain logon stays
+with AD. No Windows client should be able to tell apart the ldap4 LDAP
+service and the Windows Server LDAP service.
+
+Full AD replacement is a separate, long-horizon project, explicitly out of
+scope for FEIDE and for the current book arc, to be done on ldap4's own
+terms rather than by following Samba. Samba should slim down back to serving
+files. What that scope honestly contains, for whenever it is picked up:
+Windows domain logon is Kerberos plus DCE/RPC plus SMB plus DNS with LDAP as
+one leg of a four-legged animal, and Samba's two decades on it are the
+honest effort estimate.
+
+What LDAP-surface indistinguishability actually demands:
+
+- AD's schema as shipped, including the MSADat attribute space (already
+  parsed into the project's schema tooling)
+- AD's DIT layout: `CN=Configuration`, `CN=Schema`, and the rootDSE
+  attributes Windows probes on connect
+- `objectSid`, `objectGUID` and `sAMAccountName` semantics, not just
+  storage: objectSid has structure Windows validates and uses for
+  authorization, objectGUID must be stable and unique
+- AD's controls: paged results, `LDAP_SERVER_NOTIFICATION_OID`, ranged
+  attribute retrieval for large groups
+- SASL GSS-SPNEGO, since Windows clients bind that way rather than simple
+
+The rootDSE is the first thing a Windows client reads and the first place a
+mismatch is detected. Work starts there.
+
+The split that must be written into any estimate: the schema and rootDSE gap
+analysis is mechanical, dump both sides, diff, fill, and the visual diff
+tooling covers it. The semantics are implementation, not mapping. Behaviours
+and value structures do not come from an alias table.
+
+### Permanent DN aliases
+
+Microsoft has more money to throw at compatibility than this project ever
+will. The response is not to crash against that wall like a wave but to be
+like water and flow with it.
+
+DN aliases are a coping mechanism for that asymmetry, and therefore
+permanent, not migration scaffolding with a sunset. Old DN forms, AD-style
+and legacy OpenLDAP-style, resolve to the real tree location indefinitely.
+If a DN in ldap4 is an actual tree location rather than just a record label,
+pointers from the old locations are what make migration smooth and what make
+the service addressable in Microsoft's terms without anyone changing
+anything on day one.
+
+**Canonical form is the core intersection** (defined below). AD DNs and
+legacy OpenLDAP DNs are served as aliases pointing at it. Logs, audit
+records and the change feed all speak canonical, so the audit trail is never
+ambiguous about what got touched.
+
+Writes through an alias DN are accepted, resolve to the canonical entry, and
+are applied there. The log is very loud about it, like an old man cursing at
+a cloud: canonical DN, alias form used, which client used it. Nothing
+silent, nothing inferred.
+
+### Product framing: the Venn diagram
+
+Ship understanding both schema sets out of the box: "we do both Windows AD
+and OpenLDAP; the Venn intersection is our core; here is a visual
+representation of what is not in the core on each side."
+
+This turns the biggest adoption objection, "does it work with my existing
+directory," into the thing the project leads with, and that is the goal: to
+be able to serve anybody. The tooling already exists: the schema parser and
+poster generator produced exactly this artifact for the fifteen OpenLDAP
+schemas, and the MSADat parse is already in the project files. Generate the
+Venn diagram early, because it doubles as the implementation scoping
+document for the compatibility surface.
+
+### Online migration
+
+Target: 15-20 minutes total on reasonable hardware for AD-to-ldap4 and
+OpenLDAP-to-ldap4 migration, and back, with reads served throughout.
+
+Approach: all servers are told "migration, go read-only" for the duration
+rather than attempting delta catch-up against a moving source. Simpler,
+honest, consistent with fail-closed, and enforced by real storage-unit
+read-only state (section 8). Reads keep working; writes stop. It is a
+maintenance window, a short one, and it should be described as exactly that.
+
+The number, honestly derived: bulk copy is not the bottleneck; ten thousand
+entries is seconds of mdb-class writes. The window is set by schema
+validation on every entry, index building, and the operator's verification
+pass before the switch. Under five minutes of actual read-only for a ten
+thousand user directory, with 15-20 minutes as the whole operation including
+preparation and verification. Above roughly five hundred thousand entries
+the index build dominates and the number must be re-measured, not
+extrapolated. State it as a function of directory size, never as a flat
+claim.
+
+Caveats: read-only can only be imposed on servers under your control, and in
+an AD migration the source may belong to a team that will not freeze it. A
+migration that stops on the first schema-invalid entry is a migration nobody
+finishes, so entry rejection handling needs an explicit policy given
+every-node-validates; the Part 3 migration-tool decision applies, per-record
+diffs with unknown attributes flagged for review rather than silently
+dropped.
+
+---
+
+## 11. Client surface and operations
+
+**Item 24: native NSS and PAM**, replacing SSSD, with `sshPublicKey`
+mandatory but nullable on user entries. SSSD is doing a shitload of lifting
+by replicating the translucent proxy badly: it is a translucent proxy plus a
+cache plus an NSS/PAM shim, running on every client, configured
+independently on every client. All three jobs belong on the server side or
+in the protocol. Its configuration difficulty is downstream of that: it has
+to be told everything, domains, providers, mappings, enumeration, override
+files, because the directory refused to make any of it discoverable.
+Compensating tooling is evidence of wrong defaults, and SSSD is the largest
+single piece of compensating tooling in the ecosystem.
+
+**Item 25: home directory as a location the directory states**, not a
+configuration string it stores. The concrete instance of the section 1
+framing: automount strings and split home attributes are the NFS seam.
+
+**Item 9: promote and demote playbooks.** Ansible rehearsal of the v1
+promotion command semantics (section 2), queued as chapter-end lab work.
+
+**Item 22 (operational half): decommission-cluster.yml**, the playbook that
+ends a cluster node by node, since no destroy verb exists.
+
+**Item 11: liveness as core.** Specified in section 3.
+
+**Item 18: anomaly detection module** in the config DIT: unusual bind
+patterns, enumeration attempts, mass reads, surfaced by the server itself
+rather than by an external log scraper. Feeds the item 17 admission control.
+
+**Item 12: the pitch.** Still to be written. The Venn diagram framing in
+section 10 is probably its spine.
+
+**Item 21: adopt versus merge.** Adopting an existing directory is a
+supported, scriptable operation. Merging two live clusters is a GUI wizard
+with warnings, because it is a human decision with data-loss consequences.
+Section 3's dual-force-marker reconciliation lands here.
+
+---
+
+## 12. Item 14: test strategy
+
+Rust is the implementation language. It removes the memory-corruption class,
+use-after-free, buffer overruns, that produced most of OpenLDAP's historical
+CVE list. What remains is logic, and exploits in Rust are logic, so the
+issues will be logic mistakes. What that means concretely for a directory:
+
+- authorization logic, the ACL engine, pure logic
+- parser differentials, where the BER decoder and someone else's disagree
+  about the same bytes
+- DN and string canonicalisation, normalisation mismatches, Unicode
+  confusables
+- timing side channels in credential comparison
+- resource exhaustion, since Rust allocates happily until the OOM killer
+  arrives
+- `unsafe` blocks and any linked C library for crypto or storage
+
+Parser differentials and canonicalisation are the two worth worrying about
+most, and neither is a memory-safety class.
+
+The response is test-to-the-tits as method: each subsystem lands with its
+paranoid test load before the next starts, replication first per the item 8
+build order. But hand-written cases run out fast: a thousand cases you
+thought of do not find the input you did not. Required test classes:
+
+- property testing (`proptest`/`quickcheck`) for invariants such as
+  apply-in-any-order-converges
+- fuzzing (`cargo-fuzz`) on the wire decoder
+- deterministic seeded simulation of the whole cluster in one process, so a
+  consensus failure reproduces exactly: the FoundationDB and TigerBeetle
+  method, and the only thing that makes consensus bugs findable at all
+- deterministic fault injection for partitions
+
+**Jepsen** (carried from Part 7). Kingsbury's framework: run a small
+cluster, throw concurrent operations at it while injecting partitions,
+clock skew, process kills and pauses, record every operation, check the
+history against the claimed consistency model. Checkers are Knossos and
+Elle. It broke almost everything pointed at it, and "passed Jepsen" is the
+de facto credibility bar for distributed database claims. When replication
+exists, a Jepsen-style proof of convergence and no lost writes on a
+five-node cluster is the evidence that matters.
+
+**Partition scenarios as a required test class**: four-four even split,
+branch outvotes headquarters, forced override on one side, forced override
+on both sides simultaneously, rejoin with resync incomplete. The both-sides
+case must be tested explicitly, because the override verb is designed to
+make it hard rather than impossible.
+
+**Named test target**: the final v3-speaking build (section 8).
+
+**Scale of evidence, not scale of deployment** (carried from Part 7).
+Correctness arguments come from adversarial testing on small clusters.
+Performance arguments come from published single-node numbers on documented
+hardware. The proof-of-concept is one node with ten million entries plus a
+five-node replication cluster with fault injection; all of it fits on 3jane
+or a week of rented capacity. A thousand-VM demonstration is theater: real
+money, weeks of orchestration plumbing that teaches nothing about ldap4, and
+it invites the obvious question from exactly the people whose respect is
+wanted, why does a directory need a thousand nodes. No directory serves a
+billion entries from one tree; at that point it is sharded, which item 20
+covers.
+
+---
+
+## 13. Carried forward from earlier parts
+
+Unchanged, listed for completeness with their origins:
+
+- `require authc` is the default and cannot be turned off
+- Kerberos-only authentication as the destination; passwords as a phased-out
+  ramp; no passwords in the directory means no Password Modify op and no
+  password policy surface
+- the directory has no business with password policy of any kind: quality,
+  history, change-freshness belong to the credential authority
+- argon2id as the one permitted password scheme, if passwords are stored at
+  all during the ramp
+- management binary is `ldapctl` everywhere, never `ldap4ctl`
+- two-binary client surface: `ldapctl` operator, `ldapq` user; `ldapsearch`
+  as a permanent alias with flag translation and deprecation warnings
+- tenant isolation by process-per-tenant, systemd instantiated units, MCS
+  SELinux categories, cgroups: not ACL walls
+- opinionated mandatory core with extension points on top,
+  Kubernetes-not-Mesos
+- log output human-readable at every level, junior-admin-at-3am bar
+- log store inherits the primary database ACL; no secrets in logs
+- schema-as-DIT as the native discovery form, `cn=subschema` as a generated
+  compatibility view; sanctioned versioned core schema collapsing discovery
+  to a capability handshake
+- collapse the four-layer schema stack (attributetype, objectclass,
+  ditcontentrule, structure rules) into one schema language expressing
+  composition and placement constraints directly; validity is never encoded
+  as authorization, because a validity rule that depends on who is asking is
+  not a validity rule
+- ACL engine: materialized deny-wins evaluation, precomputed bitmask hot
+  path, no config file, live `ldapctl` edits, `acl explain` and `acl lint`
+  first-class
+- whole-word privilege names, never single letters
+- no experimental namespace in production, ever
+- anonymous bind off by default; per-application anonymous-bind bridge
+  (`ldapctl bridge`) narrows an identity for legacy apps, the opposite blast
+  radius of idassert which widens one
+- any DN used for authentication is a real DIT entry, schema-validated
+- no binary blobs in schema: photo and audio store URLs only;
+  userCertificate inline retained as a deprecated temporary exception
+- one duration grammar; one acknowledged cancel, no abandon; controls kept
+  but paging and sort in core; inline comments in config
+- `ldapexport` and `ldapimport` replace `slapcat` and `slapadd`, `--json`
+  for jq interoperability, no side-door utilities that bypass the running
+  server
+- online index builds; no offline slapindex equivalent
+- migration tool produces per-record diffs, old schema left, new schema
+  right, unknown attributes flagged for review rather than silently dropped
+- krbctl owns realm bootstrap (`krbctl realm init` for greenfield); ldap4
+  never bundles a KDC and consumes a realm via DNS SRV discovery, explicit
+  kdc pointer as override; Rust strangler-fork of MIT krb5 preserving wire
+  compatibility and the GSSAPI C ABI is the parked Kerberos plan
+- GPL3 single license
+
+---
+
+## 14. On the configuration store question
+
+cn=config was upstream OpenLDAP (2.3), not Debian; Debian and EL followed
+the default. What it was after was real: online change without restart,
+which for a replicated directory means no write outage to add an overlay or
+an index; config replicated by the same syncrepl machinery as data; config
+queryable and ACL-controlled with the same tools as everything else; and
+config validated against schema at write time rather than at next startup.
+
+The criticism that lands: it kept the file as the substrate and layered a
+directory view on top, a half measure instead of a major rewrite. One owner
+was never chosen. The result is neither hand-editable nor a real store:
+unreadable on disk, undiffable in git, uncommentable, ordering encoded in
+`{0}` prefixes, every operation needing a running server.
+
+The conclusion is not a return to a config file, which delivers none of the
+four goals. It is one authoritative store, live-editable through `ldapctl`,
+with export and import for git, and no pretence that the on-disk form is the
+interface. That is already the banked position for the ACL engine, and the
+validated-at-write-time property is the one ldap4's schema-as-DIT position
+shares with cn=config, which is worth admitting.
+
+---
+
+## 15. Benchmark plan
+
+Build one harness, protocol-agnostic where possible, used against both slapd
+and ldap4, because both need slamming. slapd is the baseline number and the
+black-box oracle (item 26), so the same harness serves correctness
+comparison and load comparison.
+
+Record hardware, dataset and query mix with every run, or the numbers are
+not comparable six months later.
+
+Dataset generation: `generate_dit.py`, already written, including the
+parser-torture edge cases (UTF-8 base64 values, RFC 4514-escaped RDNs, long
+values, binary placeholders, line folding), which double as decoder fuzz
+seeds for section 12.
+
+Expected slapd walls, roughly in order: `threads` capping concurrency before
+CPU does, unindexed filter attributes turning searches into full scans, mdb
+`maxsize` against RSS, TLS handshake cost when every query opens a
+connection, `sizelimit` and `timelimit` cutting off before the server does.
+
+**On hardware claims.** A directory workload at these scales is not
+CPU-bound and does not need dual-socket EPYC; the 96-core Threadripper
+already planned exceeds what slapd will use before hitting thread limits and
+lock contention. Storage matters in exactly one place: fsync latency on the
+write commit path, since mdb commits with a synchronous flush and every
+write op waits on the device round trip. RAID gives bandwidth, which is not
+the constraint for random small-page latency-bound reads, and is neutral to
+negative for fsync. What moves the write number:
+
+- power-loss protection, which acknowledges flush from DRAM; consumer drives
+  honour it to NAND, often an order of magnitude slower
+- batching, item 15, one transaction over many entries
+- durability mode (`dbnosync`-equivalent), faster and loses the last
+  transactions on power loss: a real tradeoff, not a free win
+- write amplification from copy-on-write page splits, a page-size and layout
+  question
+
+PLP requires capacitors, which do not fit M.2's board area or thermal
+budget. Enterprise PCIe 5.0 NVMe with PLP at 7.68TB exists in U.2, U.3 and
+E3.S: Solidigm D7-PS1010, Kioxia CM9, Samsung PM1743. Verify current
+availability before committing; the segment moves. The Rocket 1608A cards
+take M.2, so U.2 means an adapter or an HBA.
+
+Sequence: run the consumer-drive floor benchmark on existing hardware,
+publish it honestly, stating the bottleneck actually found rather than the
+hardware owned, since a claim of "tested on PCIe 5.0 NVMe RAID" for a
+workload that never left page cache is noise someone will call. Then
+approach Kioxia for a loan box with U.2 or U.3. A cold ask gets nothing; an
+ask backed by a published benchmark and a named project gets answered. Hard
+acknowledgement of Kioxia in the writeup; thanking a vendor for hardware is
+standard practice, and "I am not made of money, I am just a sysadmin" is a
+complete answer to anyone who minds. The one line that matters: the numbers
+say what they say, including when the loaned drive loses, and a vendor who
+wants a different deal is not worth the loan.
+
+Queued: slapd strain test using `generate_dit.py`, after the Chapter 7
+checklist.
+
+---
+
+## 16. Open questions
+
+1. Whether local-only attributes must be filterable under item 34. Decide
+   before the FEIDE lab.
+2. Break-glass design under item 34: the middle ground between no-bypass and
+   a recoverable directory.
+3. Security support terms for the pinned final v3-speaking build.
+4. How far back the version support window extends as a published promise,
+   beyond the v3 five-year statement.
+5. Whether ldap4 is relying party or issuer under item 33.
+6. Entry-rejection policy during migration, given every-node-validates.
+7. Whether any referral-shaped mechanism survives for non-core purposes
+   (item 3 note: "can be useful, need to think how").
+8. What, if anything, of the site-weight policy layer above raft gets built
+   versus solved by voter placement plus sharding.
+9. Item 12: the pitch, still unwritten.
