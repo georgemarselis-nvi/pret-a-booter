@@ -1482,3 +1482,91 @@ this instead of inventing your own layout.
 
 Gaps (6-8) are unassigned in the convention; leave them unassigned.
 Most schema work touches only .3 and .4.
+
+## Chapter 7: Replication and Proxying
+
+### syncrepl indexes (required on provider and consumer)
+index entryCSN,entryUUID eq
+
+### Provider stack
+overlay syncprov
+syncprov-checkpoint 100 10
+syncprov-sessionlog 100
+
+### Delta-syncrepl provider (accesslog backend required)
+overlay accesslog
+logdb cn=log
+logops writes
+logsuccess TRUE
+
+### Delta-syncrepl consumer
+syncrepl rid=001 provider=ldaps://ldap.marsel.is type=refreshAndPersist searchbase="dc=marsel,dc=is" bindmethod=simple binddn="uid=replicator,ou=services,dc=marsel,dc=is" credentials=1234567 syncdata=accesslog logbase="cn=log" logfilter="(&(objectClass=auditWriteObject)(reqResult=0))"
+
+### Replication user needs unlimited limits or it silently truncates
+limits dn.exact="uid=replicator,ou=services,dc=marsel,dc=is" size=unlimited time=unlimited
+
+### back-ldap proxy: no local storage, no directory directive
+moduleload back_ldap
+database ldap
+uri "ldaps://remote.example.com"
+suffix "dc=example,dc=com"
+
+### Proxy identity assertion
+idassert-bind bindmethod=simple binddn="uid=authenticate,ou=system,dc=example,dc=com" credentials="secret" mode=self
+idassert-authzFrom "dn.subtree:dc=example,dc=com"
+
+### pcache (proxy cache)
+overlay pcache
+proxycache mdb 1000 1 50 1200
+proxyattrset 0 uid mail cn sn givenName
+proxytemplate (uid=) 0 600
+
+### translucent (local attributes over remote entries)
+moduleload back_mdb
+moduleload translucent
+overlay translucent
+
+## Chapter 7 gotchas
+
+- uri takes a space or comma separated list. Ordered failover with head
+  promotion, not round robin. The responding server moves to the head of
+  the list. No load spreading.
+
+- proxycache third parameter is the count of proxyattrset directives
+  defined below, not a flag. Bump it whenever an attrset is added.
+
+- Two proxytemplate lines with the same filter are accepted. The key is
+  template plus attrset, so the same query is cached twice with two TTLs
+  that can disagree.
+
+- pcache negative TTL is the fourth proxytemplate parameter, off by
+  default. Turning it on caches misses, so a newly created account can
+  appear not to exist for the length of the TTL.
+
+- The book writes bdb in every proxycache and translucent example.
+  back-bdb is removed in 2.6. Use mdb.
+
+- The book calls the overlay "transparent" in prose. The overlay is
+  translucent.
+
+- translucent merges local values over remote ones and appends
+  local-only attributes. The remote entry is never modified. Verify by
+  searching the remote directly.
+
+- slapcat and slapadd on a translucent proxy dump and load the local
+  overlay only, not the merged view. A backup of the proxy is not a
+  backup of the directory.
+
+- rootdn bypasses ACL evaluation entirely, so on a translucent proxy it
+  can write local entries under DNs it cannot read remotely.
+
+- idassert-authzFrom is the local half of proxy authorization: whose
+  identity this proxy will assert onward. authzTo on the remote server
+  is the other half, deciding which asserted identities it accepts.
+  Both sides must agree or the assertion fails.
+
+- lastmod off is no longer needed on ldap and meta databases. Current
+  slapd sets it automatically.
+
+- Man pages for what the book does not cover: slapd-ldap(5),
+  slapo-translucent(5), slapo-rwm(5), slapo-pcache(5).
