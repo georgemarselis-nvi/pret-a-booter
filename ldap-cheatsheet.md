@@ -1570,3 +1570,24 @@ overlay translucent
 
 - Man pages for what the book does not cover: slapd-ldap(5),
   slapo-translucent(5), slapo-rwm(5), slapo-pcache(5).
+
+## Appendix C: Useful Commands
+
+### rootDSE (server self-description, empty DN)
+/usr/bin/ldapsearch -x -LLL -b '' -s base -D 'cn=admin,dc=marsel,dc=is' -y ~/.ldappasswd '+'
+
+### Subschema (full schema as the server holds it)
+/usr/bin/ldapsearch -x -LLL -b 'cn=Subschema' -s base -D 'cn=admin,dc=marsel,dc=is' -y ~/.ldappasswd '+'
+
+### LDIF backup (portable, slapd stays running)
+/usr/bin/slapcat -l /var/backups/ldap/marsel.ldif
+
+### LDIF backup, one suffix at a time (multi-database server)
+/usr/bin/slapcat -b "dc=marsel,dc=is" -l /var/backups/ldap/marsel.ldif
+/usr/bin/slapcat -b "cn=log" -l /var/backups/ldap/log.ldif
+
+### Database-file backup (fast node restore, format hostage)
+/usr/bin/mdb_copy -c /var/lib/ldap /var/backups/ldap/mdb-snapshot
+
+### Startup debugging
+/usr/bin/slapd -d trace -f /etc/ldap/slapd.conf
