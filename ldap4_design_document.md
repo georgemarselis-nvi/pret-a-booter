@@ -2793,3 +2793,32 @@ care. Written so it cannot be read as "because it should be that way":
 the first public contact failed on exactly that, by the reader's own
 words, and the reader re-engaged helpfully within twelve minutes of the
 argument ending, which is the profile of the audience the pitch is for.
+
+## Parking lot item 37: proxy schema must be derived, not duplicated
+
+Source: slapd-ldap(5), read during FEIDE back-ldap planning.
+
+Current LDAPv3 behaviour: a proxy instance must contain its own copy
+of the schema for every attribute and objectClass used in filters,
+request DNs, request-related data, and returned data. Keeping that
+copy aligned with the proxied server is stated as the proxy
+administrator's responsibility. There is no mechanism to enforce it.
+
+Why this is wrong: the proxied server already publishes its schema at
+cn=subschema, readable over the same connection the proxy is already
+using. The proxy has everything it needs to derive the schema and
+does not. The result is two hand-maintained schema definitions in two
+systems with no validation between them, and a silent failure mode:
+a filter referencing an attribute the proxy does not know about
+returns no results rather than an error.
+
+ldap4 position: a proxy or federation front end fetches the remote
+schema at connection setup and validates against it. Divergence is
+detected and reported, not discovered in production. A hand-written
+local schema copy for a proxied backend is not a supported
+configuration.
+
+Open questions: caching and refresh policy for the derived schema;
+behaviour when the remote schema changes while connections are live;
+whether local additive overrides on top of the derived schema are
+permitted at all.
