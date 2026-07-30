@@ -2822,3 +2822,112 @@ Open questions: caching and refresh policy for the derived schema;
 behaviour when the remote schema changes while connections are live;
 whether local additive overrides on top of the derived schema are
 permitted at all.
+
+# Content-addressed replication verification
+
+## Problem
+
+OpenLDAP replication uses logical clocks only: entryCSN per entry,
+contextCSN per context, and a syncrepl cookie carrying the replica's
+position. These answer one question, "what has changed since I last
+asked". They cannot answer the question that matters in operations,
+"does what you hold match what I hold".
+
+The consequence is silent divergence. delta-syncrepl replays a change
+log and assumes that applying the same operations yields the same
+state. If a replica's storage corrupts an entry, or an entry is
+modified out of band, or a replay is partially applied, the CSN
+remains correct and the replica reports healthy indefinitely. Nothing
+in the protocol or the implementation detects it. The only recovery is
+a full refresh triggered by suspicion rather than evidence.
+
+## Position
+
+ldap4 replication verifies content, not just position. Every entry
+has a content digest. Every container node has a digest derived from
+its children. The root digest of a naming context summarises the
+entire subtree.
+
+A replica compares root digests with its provider. Match means the
+replica is verified complete, at the cost of one digest exchange.
+Mismatch means descending only into the branches whose digests differ,
+so the cost of locating divergence is logarithmic in tree depth rather
+than linear in entry count. The DIT is already a tree; the structure
+is free.
+
+This is the ZFS scrub model and the Git tree-object model applied to
+the directory. It is not a bandwidth optimisation. It is the ability
+to state, with evidence, that a replica is correct.
+
+## Why a flat digest list does not work
+
+The naive form is sending a list of every entry digest before sending
+content. At 10 million entries this is 320 MB of raw sha256 per sync
+cycle, 640 MB hex-encoded. That is unusable as a routine check, and if
+it only runs on full refresh it adds nothing over current behaviour.
+The tree is what makes verification cheap enough to run continuously.
+
+## Canonicalisation is the whole design
+
+An entry digest requires exactly one deterministic byte serialisation
+of a logical entry. If two servers can serialise the same entry
+differently, every digest mismatches and the mechanism is worse than
+useless: it reports permanent divergence on healthy replicas.
+
+Requirements:
+
+- Attribute ordering fixed by a stated rule
+- Value ordering within multi-valued attributes fixed by a stated rule
+- DN normalisation settled and identical across implementations
+- Values reduced to one form per their matching rule before hashing
+- Operational attributes explicitly in scope or out, per attribute
+
+LDIF is not canonical and cannot be made canonical cheaply. This needs
+its own serialisation, defined normatively, with test vectors shipped
+so implementations can prove conformance.
+
+## Replication metadata is excluded from the entry digest
+
+entryCSN and modifyTimestamp equivalents cannot be inside the hashed
+content, because they differ per replica by construction and would
+make every entry diverge.
+
+This creates a gap that must be closed deliberately: content is
+verified by digest, replication position is carried separately, and
+the two can disagree. A replica can hold content that hashes correctly
+while claiming a position it has not reached, or the reverse. The
+design must state which is authoritative when they conflict, and what
+the recovery action is. Unresolved.
+
+## Write cost
+
+Every write recomputes the entry digest and every ancestor digest to
+the root. Tree depth in practice is five or six levels, so this is a
+small constant number of hash operations per write.
+
+The root digest is a write-contention point, since every write in the
+context touches it. Mitigations to evaluate: computing ancestor
+digests lazily on demand, or recomputing them per change-feed segment
+rather than per write. The change feed is already core to ldap4, so
+segment-aligned digest computation is the natural fit and should be
+the first candidate.
+
+## Algorithm
+
+sha256. Not sha512: the digest appears in wire messages, logs, and
+operator-facing output, and 64 hex characters is already at the limit
+of readability. There is no collision-resistance argument for the
+larger digest at this threat model. One algorithm only, no negotiation,
+no algorithm agility field. If sha256 ever needs replacing, that is a
+protocol version bump, not a runtime option.
+
+## Open questions
+
+- Interaction with the change feed: does the feed carry digests, or
+  are they derived independently on both sides?
+- Behaviour when a mismatch is found: automatic repair of the diverged
+  branch, or report and require operator action?
+- Whether an operator can request verification on demand
+  (ldapctl replica verify) or whether it runs continuously
+- Whether subtree digests are exposed as readable attributes or kept
+  internal to the replication path
