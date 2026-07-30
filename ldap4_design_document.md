@@ -2931,3 +2931,148 @@ protocol version bump, not a runtime option.
   (ldapctl replica verify) or whether it runs continuously
 - Whether subtree digests are exposed as readable attributes or kept
   internal to the replication path
+
+# Photo attributes: photoURI, aliases, and the jpegPhoto shim
+
+## Problem
+
+Under the no-blobs rule the directory does not store image bytes. But
+jpegPhoto (RFC 2798, inetOrgPerson, syntax 1.3.6.1.4.1.1466.115.121.1.28)
+has been the standard inline-bytes attribute since 1998 and is what
+every existing consumer reads: GDM, AccountsService, staff directory
+pages, address book clients. Removing it outright breaks all of them
+on day one.
+
+Separately, the directory currently has nothing to say about whether
+the thing a URI points at is fit for purpose. Portraits arrive at
+mixed dimensions, aspect ratios, formats and sizes, and every consumer
+downstream compensates by cropping, scaling, or failing silently. The
+organisation has a constraint; it is written in a wiki page nobody
+reads and enforced nowhere.
+
+## The attribute
+
+photoURI is the attribute. Format is declared in the constraint
+policy, not encoded in the attribute name, so pointing at a PNG does
+not make the attribute name a lie.
+
+jpegPhotoURL is a permanent alias for photoURI. Reads and writes
+against the alias resolve to the same attribute. Tooling emits a
+deprecation warning naming the canonical form. The alias is never
+sunset, on the same reasoning as the ldapsearch alias: breaking
+existing scripts to enforce a naming preference is not worth it.
+
+URI, not URL, matching LDAP's existing convention in labeledURI
+(RFC 2079). This admits non-dereferenceable schemes such as urn: and
+data:, so the permitted-scheme list in the constraint policy is the
+control point rather than an afterthought.
+
+## Constraints on referents
+
+The directory states the constraint. A policy entry alongside the
+schema declares, per URI-valued attribute, what the referent must
+satisfy: dimensions or dimension range, aspect ratio, permitted
+formats, maximum byte size, permitted URI schemes.
+
+Verification is out of band, never at write time. The directory does
+not fetch URIs during a modify operation: that would make writes
+depend on network reachability of an arbitrary third party. Instead
+ldapctl fetches, checks and reports:
+
+    ldapctl lint referents
+    ldapctl lint referents --attribute photoURI
+
+Output names the entry DN, the attribute, the declared rule, and the
+observed value. The failure message identifies the rule that was
+broken.
+
+Not statistical. An earlier framing was to learn the norm from the
+data and flag outliers. Rejected: if the constraint is learned rather
+than declared, the first batch of bad entries defines the norm and the
+check then enforces the mistake. A stated rule fails explainably; a
+percentile fails arbitrarily and cannot be argued with. Same reasoning
+as the ACL engine position, where explain and lint are first-class
+operations against declared rules rather than heuristics over observed
+behaviour.
+
+Portraits are the motivating example, not the scope. The mechanism is:
+for any attribute whose value is a pointer rather than content, the
+directory may declare constraints on what is pointed at and ship
+tooling to verify them. Certificate URIs, homepage URIs, schema
+extension URIs, anything referenced rather than stored.
+
+## The jpegPhoto shim
+
+An LDAPv3 client requesting jpegPhoto may receive the dereferenced
+content of photoURI as bytes, so existing consumers keep working.
+
+Opt-in per client or per compatibility profile, never default. A
+client requesting photoURI gets the URI. Only a request for the legacy
+jpegPhoto attribute triggers dereference, and only where the profile
+permits it.
+
+Fetch failure returns the attribute absent. Never an error, never a
+stall. Timeout is short and fixed. A dead or slow photo host degrades
+to no photo, which every existing consumer already handles, rather
+than degrading directory response time.
+
+## Two legacy names, two behaviours
+
+  jpegPhotoURL -> alias for photoURI, returns a URI
+  jpegPhoto    -> compatibility shim, returns dereferenced bytes
+
+They meant different things in LDAPv3 and continue to. Stated
+explicitly because the natural assumption is that the alias
+dereferences too.
+
+## jpegPhoto is not storable
+
+jpegPhoto is not a stored attribute. It does not appear in the schema
+as a stored attribute at all: it appears in the compatibility profile
+as a synthesised, read-only attribute. This keeps schema-as-DIT
+honest, since what the schema lists is what the directory holds.
+
+A write to jpegPhoto is rejected outright. Not silently dropped, not
+stored, not converted by uploading the bytes somewhere. The error
+names the remedy: store the image at an addressable location and set
+photoURI.
+
+Rationale for the hard failure: silent acceptance would let a client
+write bytes, read them back through the shim, and believe it works,
+with the illusion holding until the first replication or the first
+read from another server.
+
+## Shim use is logged, and the shim ends
+
+Every shim dereference logs at a level operators see, naming the bind
+DN, the client address, and the attribute requested. The deprecation
+is then evidence-backed: the list of clients still needing work is
+observed rather than guessed, and the shim can be removed when the
+list is empty.
+
+Unlike the ldapsearch alias, which is permanent because it costs
+nothing, this shim carries operational risk and has a stated
+deprecation path. The end state is that photoURI is the only interface
+and no dereference happens server-side. The message to client authors
+is explicit: request photoURI and render the picture yourself.
+
+Acknowledged cost while it exists: the blob does not live in the
+database, but it crosses the wire from the directory, so to the client
+the directory is the fileserver. Storage moved out, delivery did not.
+This requires a cache, a concurrency limit and a fetch failure policy:
+machinery that exists only to serve a compatibility path.
+
+## Open questions
+
+- Where constraint policy entries live in the DIT, and whether they
+  are part of schema-as-DIT or a sibling structure
+- Whether a lint violation is ever a hard error, or always advisory
+- Cache policy for shim fetches: TTL, size bound, whether shared
+  across clients
+- Concurrency limit on outbound fetches, and behaviour when a single
+  search would exceed it
+- Whether an alias write that conflicts with the declared format
+  policy (a PNG written via jpegPhotoURL) is an error, a warning, or
+  silently accepted: the alias name implies a constraint the canonical
+  attribute does not carry
+- Whether the fetcher
