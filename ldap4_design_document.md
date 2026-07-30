@@ -2574,40 +2574,222 @@ checklist.
    versus solved by voter placement plus sharding.
 9. Item 12: the pitch, still unwritten.
 
-Everything banked since the chapter 7 design document was produced, in order:
 
-**Application interface (the nssng arc):**
-- No application speaks LDAP. AuthN and posix identity go through the OS (PAM/NSS); the ldap4 modules are where directory awareness ends
-- Tier two for rich queries: a small named-facts library (nssng working name), no raw filter passthrough, `ldapq` as the human face of the same surface. API design deferred to December
-- NSS may eventually adopt the fact-lookup mechanism; the vocabulary stays data, never ABI
+---
 
-**Identity:**
-- UUID is canonical identity; posix uid/gid is a cluster-allocated 32-bit projection bound to it. Translation layer designed in December; SSSD idmap as cautionary reference, not model
-- Local-account adoption offered at cluster genesis and as an `ldapctl` verb later; collision detection at bind time; system range 0-999 never directory-managed
-- Stable uid/gid across the cluster; allocation is consensus-ordered with a declared range
+**Post-Chapter-7 Decisions (Chapter 8 and Appendices Harvest)**
 
-**URLs:**
-- ldap4 URLs are addresses only, HTTP-style: verbs live in the protocol operation or `ldapctl` command. Dereference has no side effects, ever
+Banked during the chapter 8 skim and appendices B and C, plus the first
+public contact with the design (Discord, 2026-07-29) and the Butcher
+correspondence. Integrated here as sections; the earlier bullet summary
+this replaces carried the same content.
 
-**Discovery and topology:**
-- The server root is a real tree node; capabilities, schema, naming contexts are genuine children, recursable by ordinary subtree search. Supersedes the parked rootDSE-replacement item. Connect-time version negotiation (item 35) stays separate
-- DNS is a hard prerequisite. Discovery is SRV only, no config-file server list. Break-glass direct address via `ldapctl --server` as explicit override
+**The Application Interface (nssng)**
 
-**Configuration:**
-- The dividing line is "does it replicate": directory config (ACLs, schema, replication membership) lives in the tree as a real subtree; server operation (binds, listeners, process resources) is local and readable with the directory down
+No application speaks LDAP. Ever. Authentication and posix identity go
+through the operating system: PAM for AuthN, NSS for identity resolution,
+and the ldap4 PAM/NSS modules are where directory awareness ends. Apache
+needing mod_ldap plus mod_authnz_ldap, every vhost carrying a bind DN, a
+password, a search base and a filter, is the four-field disease made
+permanent; under this rule the entire apparatus evaporates rather than
+improves. The precedent is Windows: AD applications do not speak LDAP for
+logon, they call platform auth APIs, and it is one of the few things
+Microsoft got architecturally right.
 
-**Storage and backup:**
-- Format versioned and migratable, never frozen. N-1 in-place read floor; migration tool reads all prior generations in one hop (the pg_upgrade property); refusal always loud and version-named; silent corruption structurally impossible
-- Snapshots carry a format-generation header and share one migration path with in-place upgrades; backup and learner-join share one snapshot mechanism
-- LDIF via ldapexport is the eternal archive format; release artifacts vendor dependencies as documented last resort
-- December: ldapexport per-record hashes plus chained file hash; canonicalisation is the prerequisite
+The honest gap: NSS is a narrow pipe. It answers posix questions and has
+no interface for "this person's mail and manager" or "everyone in
+department X." Forcing rich queries through posix interfaces produces
+hacks, so the design is two-tier. Tier one, identity and auth, goes
+through the OS, always, no exceptions. Tier two, rich directory queries,
+goes through one sanctioned programmatic surface: a small C ABI (working
+name nssng) with lookup-identity, enumerate-by-attribute, and
+get-named-facts calls, language bindings on top, speaking to a local
+daemon that speaks ldap4. `ldapq` is the human face of the same surface.
 
-**Privilege:**
-- Root exists for one act, the privileged bind, delegated to systemd socket activation; the server binary never runs as root. Everything else unprivileged by construction. December for the full model
+Constraints on tier two: named facts only, no raw filter passthrough, or
+the LDAP client library has been reinvented with extra steps and
+applications resume encoding directory structure in code. The query
+surface is as small as the ownership map. The facts vocabulary is data,
+never ABI: if NSS or a successor eventually adopts the fact-lookup
+mechanism, the struct stays small and the facts behind it evolve without
+a standards revision. RFC 2307 froze one moment's needs into two layers
+permanently; nssng must not repeat that. Going through POSIX
+standardisation is explicitly not the path: ship the library, earn
+adoption de facto, let standardisation follow decades later if at all.
+API design is December work.
 
-**Extension points:**
-- No execute-my-script backend, ever (the back-perl lesson). Compatibility is for other people's systems; the import pipeline is for escaping your own broken ones once, not wearing them
+The legacy glibc NSS module covers the posix subset so unmodified
+applications keep working. Mail clients treating the directory as an
+address book (Outlook against the GAL being the live case) are tier-two
+clients and part of the AD-compat scope whether wanted or not.
 
-Plus the Exchange/GAL address-book note folded into the AD-compat scope, and the standing observation that mod_authnz_ldap and the whole chapter 8 apparatus is what tier one deletes.
+**Identity: UUID Canonical, uid as Projection**
 
-That is the state. Next conversation gets these merged into the design document proper.
+The canonical identity of an entry is a UUID. The posix uid/gid is a
+cluster-allocated 32-bit projection bound to that UUID: a rendering of
+identity, not identity. This is the same architecture the kernel itself
+adopted with kuid_t and user namespaces, the userspace uid as a mapped
+projection of an internal identity, one layer up, with ldap4 owning the
+canonical layer. No kernel change required or proposed: uid_t is 32 bits
+in every syscall, every inode, every struct stat, and a 128-bit identity
+on disk means rewriting the Unix ABI. The projection layer is the design
+answer.
+
+Allocation is consensus-ordered against a declared range, identical on
+every node that resolves it. The reserved system range 0-999 is never
+directory-managed: root is local, forever.
+
+Local-account adoption is a first-class operation: at cluster genesis the
+operator is offered promotion of existing /etc/passwd users into
+directory accounts, and the same offer exists later as an ldapctl verb,
+since machines join fleets after genesis. Promotion binds the existing
+local uid to the new UUID as that host's projection; collisions are
+detected at bind time and the wizard warns. Per-record diff, operator
+confirms, nothing silent, same as every other adopt operation.
+
+The translation layer, range policy, and the shared-storage rule (where
+projections from two hosts must agree or chown honestly) are December
+design work. SSSD's algorithmic idmap is the cautionary reference, not
+the model: it works only when every host computes identically, which is
+fleet discipline masquerading as a solved problem, and its failure mode
+is files on shared storage silently belonging to nobody.
+
+**URLs Are Addresses**
+
+ldap4 URLs are nouns naming an entry or a search, HTTP-style. Operations
+live in the protocol verb or the ldapctl command: `ldapctl delete <url>`
+is `DELETE /resource`, verb in the operation, address in the URL.
+Dereferencing an ldap4 URL has no side effects, period, the same safety
+contract as HTTP GET. No URL form mutates on dereference: URLs are
+prefetched, logged, cached, pasted into chat and expanded by link
+previewers, and a mutating URL in any of those paths is an incident. The
+LDAP URL RFC stayed read-only deliberately; ldap4 keeps that and gains
+the composability by making URLs first-class operation targets instead.
+
+**Discovery: the Server Is a Real Tree**
+
+The server root is an actual entry. Capabilities, schema, and naming
+contexts are genuine children of it, recursable by an ordinary subtree
+search from the root. No islands: the rootDSE pattern, pointer attributes
+naming entries that no search can reach by descent, three hand-crafted
+searches for three adjacent things, is X.500's amputated global tree
+leaving its stump in the protocol. The global tree died correctly, DNS
+absorbed its role; ldap4 finishes the amputation honestly by making the
+server the root of a real tree. This supersedes the earlier parked
+rootDSE-replacement item (capabilities as a named protocol response): the
+discovery surface is queryable tree, while connect-time version
+negotiation (protocol strictness section) remains a separate wire
+mechanism. One obligation follows: the server's own children are a
+reserved namespace that must not collide with hosted naming contexts.
+
+DNS is a hard prerequisite, stated as a feature. Discovery is DNS SRV
+only. There is no config-file server list as a parallel discovery
+mechanism, because parallel discovery mechanisms are how the four-field
+disease started. The single exception is break-glass direct addressing,
+`ldapctl --server <addr>`, an explicit override for the 3am case, not a
+discovery path. AD is the existence proof that requiring correct DNS is a
+reasonable ask.
+
+**Configuration: the Dividing Line Is Replication**
+
+Does it replicate? Directory configuration, ACLs, schema, replication
+membership, policy, replicates and lives in the tree as a real subtree
+under the server root, live-editable through ldapctl, validated at write
+time. Server operation, listeners, bind addresses, process resources, is
+local, lives outside the DIT in systemd units and the deployment layer,
+and must remain readable and fixable with the directory down. Bind
+addresses are operations, not data. cn=config's original sin was pouring
+both into one bucket; the replication membership of a cluster replicates
+while a node's own listen address does not, and that line resolves every
+boundary case so far examined.
+
+**Storage: Versioned Format, Eternal LDIF**
+
+The on-disk format is versioned and migratable, never frozen. Freezing a
+format forever means never fixing a layout mistake; the BDB sin was not
+that formats changed but that nothing told you, the file just
+misbehaved. The contract: N-1 in-place read as the floor; the migration
+tool reads all prior format generations in one hop (the pg_upgrade
+property, and the actual Postgres behaviour: refusal across majors, one
+deep-reaching migration tool, logical dump as the eternal format);
+refusal is always loud and version-named; silent corruption is
+structurally impossible.
+
+Snapshots carry a format-generation header and share one migration code
+path with in-place upgrades, so the migration path is exercised by
+normal operations rather than rotting in a disaster-only converter.
+Backup and learner-node join share one snapshot mechanism: a backup is a
+snapshot nobody replayed a tail onto yet. Two backup modes with distinct
+jobs: the LDIF export (ldapexport) is the portable eternal archive,
+readable forever because it is data rather than layout; the snapshot is
+fast node restore and a format hostage by design. A real regime runs
+both on different cadences.
+
+ldapexport gains per-record hashes plus a chained file hash (December,
+canonicalisation of the record form is the prerequisite and lands in the
+same pile as the DN-canonicalisation test work). The hashes do double
+duty as migration accounting: import produces an exact ledger, N records
+counted in a pre-pass, "x of N imported" as live progress, per-hash
+disposition (imported clean, rejected by validation, transformed with
+source-hash to destination-hash pairing). Nobody argues about what
+failed when the failure list is hashes, and the junior-at-3am bar
+applies to progress output: never a silent tool that might be hung,
+always a count. Old releases stay buildable as the documented last
+resort, which obligates vendored dependencies in release artifacts,
+buildable offline forever.
+
+**Privilege: Root for One Act, Delegated Away**
+
+Root exists in ldap4's lifecycle for exactly one act, binding the
+privileged port, and that act is delegated to systemd socket activation
+so the server binary never runs as root at all. Key material arrives as
+an fd via LoadCredential, not file permissions. Everything else runs
+unprivileged by construction rather than by configuration: the slapd
+model, start as root and drop with -u, makes running-as-ldap something
+the operator fights for across key, directory, pidfile and argsfile
+permissions, each failing separately with silent startup death. In ldap4
+there is nothing to get right because no other mode exists. Full
+privilege model is December work.
+
+**Extension Points: No Executable Backends**
+
+No execute-my-script backend, ever. back-perl and back-shell answered
+the extension question maximally wrong: arbitrary code inside the core,
+an interpreter in the server process, no schema enforcement on what the
+script returns, and the organisational effect of letting a broken
+upstream system calcify behind a wrapper that becomes load-bearing.
+Compatibility in ldap4 is for other people's systems, the ones whose
+owners cannot be reached (the translucent mode exists precisely for
+AD-shaped neighbours); the import pipeline is for escaping your own
+broken systems once, on the way to fixing them, not for wearing them
+forever.
+
+**Pitch Thesis (item 12 material, December)**
+
+The claim that survives contact: if ldap4 and the Kerberos-successor
+arc land, IdP products stop being identity systems and become policy
+and federation layers over a directory that no longer needs
+compensating for. What collapses into GUI-plus-glue is the
+identity-bridging IdPs sell because directories refused to do it:
+LDAP-interface shims, sync machinery, the credential-store-plus-token-
+issuer split. What does not collapse, and the pitch must concede:
+cross-organisation federation brokering, conditional-access policy
+engines, device posture, the SaaS connector catalogue, lifecycle
+workflow. Those remain real products; they stop owning the identities.
+Cloud IdPs killed the LDAP client experience, not the directory: people
+fled the tooling, not the tree, and a directory that fixes the client
+experience competes for exactly those refugees.
+
+Supporting material gathered 2026-07-29: Butcher (book author, Helm
+creator) unprompted: "I would absolutely love to see your ldap4 project
+come to fruition. Rust makes a great language for it, as does a modern
+consensus algorithm. I firmly believe that LDAP has a lot of untapped
+potential." Oetiker shipping a Rust TUI LDAP editor the same week, whose
+own save dialog makes the user read modrdn LDIF to change a surname:
+the tools-are-broken claim demonstrated by the friendliest tool of
+2026. The skeptic's ladder the pitch must answer before the spec opens:
+why not SSSD, why not FreeIPA, why not cloud IdPs, why should the IETF
+care. Written so it cannot be read as "because it should be that way":
+the first public contact failed on exactly that, by the reader's own
+words, and the reader re-engaged helpfully within twelve minutes of the
+argument ending, which is the profile of the audience the pitch is for.
