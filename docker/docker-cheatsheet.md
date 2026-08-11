@@ -174,3 +174,164 @@ docker. In the book's examples that is stress: --cpu N burners,
 docker system events, not docker service events. It blocks and
 streams: run it in one terminal, trigger the event in another.
 Default user inside the container is root; --user changes it.
+
+# Docker cheatsheet: chapter 6, exploring Docker
+
+## Version and info
+docker version          client and server component versions, API
+                        version and daemon minimum (e.g. 1.55, min
+                        1.40). Client negotiates down to the daemon
+                        API on connect; a field the old daemon does
+                        not know inside a valid request is silently
+                        ignored. Keep client and daemon matched.
+                        Server unreachable: prints client block only.
+docker system info      daemon state and environment: storage driver,
+                        cgroup version, kernel, OS, runtimes (runc
+                        default), plugin list (volume, network, log
+                        drivers), container and image counts, warnings
+                        about missing kernel capabilities.
+Version answers "what am I running", info answers "what is this host
+and what can it do". Neither names the endpoint host:
+docker context ls / docker context inspect dockervm for that.
+dockerd --data-root     move /var/lib/docker elsewhere; permanent
+                        form belongs in /etc/docker/daemon.json.
+
+## Pulling
+docker image pull ubuntu:latest
+latest is a convention, not a guarantee: it is whatever the publisher
+last tagged, moves without notice, and Docker never auto-updates a
+local copy. Production deploys pin a version tag, or better the
+content digest:
+docker image pull ubuntu@sha256:b6b83d...
+Digest pulls require the FULL hash, no prefix shortening.
+
+## Inspect
+docker container inspect <id|name>
+Id: container identifier, random at creation, 64 hex chars, any
+unambiguous prefix accepted, short form is first 12.
+Image: content-addressed sha256 digest of the image the container was
+created from. One image per container, always a single digest; the
+image's layers have their own digests but live in
+docker image inspect under RootFS.Layers, not here. Multi-platform
+manifests resolve to the digest of the one platform image used.
+Also in inspect: Config.Env, Cmd, Hostname, Created (precise),
+State.Pid (host PID, feeds nsenter).
+
+## Exec and nsenter
+docker container exec -it <id> /bin/bash
+New process inside all of the container's namespaces and cgroups, via
+the daemon. -d runs it backgrounded: debugging only, since anything
+the deployment depends on belongs in the image. To signal the main
+process instead: docker container kill -s <SIGNAL>.
+A container runs ONLY what you asked for: no init, no background
+services. ps -ef inside shows the entrypoint as PID 1 and nothing
+else.
+nsenter: enters a running process's namespaces directly via the
+kernel. Needs a container already running and its main PID:
+  docker inspect --format '{{.State.Pid}}' <name>
+  nsenter -t <pid> -m -p /bin/bash
+vs exec: works with the daemon dead (running containers survive it,
+parented by containerd-shim), selective (-n = network only, keep host
+fs and tools), any process not just Docker. Cannot start anything.
+Skips cgroups. Needs root. Covered properly at p328.
+
+## Returning a result
+Foreground run, no TTY: stdin, stdout, stderr and the exit code proxy
+to the local terminal.
+docker container run --rm ubuntu /bin/false; echo $?   -> 1
+Pipes run LOCALLY unless quoted into a remote shell:
+  ... /bin/cat /etc/passwd | wc -l      wc runs on molly
+  ... bash -c "cat /etc/passwd | wc -l" wc runs in the container
+
+## Volumes
+docker volume create my-data
+docker volume ls / inspect / rm
+Named volumes are daemon-managed directories at
+/var/lib/docker/volumes/<name>/_data on the daemon host. No size
+limit: they grow until the disk (vdb) is full. Bind mounts never
+appear in docker volume ls.
+Attach: --mount source=my-data,target=/app
+Data persists across containers; mount the same volume elsewhere and
+the files are there.
+rm of an in-use volume fails with "volume is in use" listing holder
+container IDs, including STOPPED containers hidden from plain ls: rm
+the container first (docker container ls -a to find it).
+
+## Logging
+Default driver json-file: daemon captures stdout and stderr, one JSON
+file per container at
+/var/lib/docker/containers/<id>/<id>-json.log
+(fields: log, stream, time).
+docker container logs <name>
+  -f            follow
+  --since       RFC3339, unix ts, or Go duration (5m45s)
+  --tail N
+Rotation is NOT enabled by default: set --log-opt max-size and
+max-file (max-file inert without max-size) in daemon.json for
+production. After rotation, logs command reads current file only.
+Other drivers: syslog, journald, fluentd, gelf, awslogs, splunk,
+gcplogs, local. ONE driver at a time; anything except json-file or
+journald KILLS docker container logs unless the plugin keeps a local
+copy.
+syslog driver over TCP/TLS blocks container START if the log server
+is unreachable: use UDP and accept lossy delivery, or non-blocking
+mode: --log-opt mode=non-blocking --log-opt max-buffer-size=4m
+(drops oldest lines when full).
+Apps that insist on writing files: --read-only plus tmpfs mounts.
+
+## Stats
+docker container stats [name]      live stream, top-style; all
+                                   containers when unnamed
+  --no-stream                      single snapshot
+Columns: CPU% (100% = one core), mem usage/limit, net and block I/O,
+PIDs. Mem-vs-limit exposes OOM-kill loops; PIDs exposes unreaped
+children.
+Richer form, one endpoint per container, streams until closed:
+  curl --no-buffer --unix-socket /var/run/docker.sock \
+    http://docker/containers/<name>/stats | head -n 1 | jq
+
+## Health checks
+HEALTHCHECK CMD ["cmd"] in the Dockerfile: daemon runs it in the
+container; exit 0 healthy, anything else unhealthy. Status appears in
+container ls next to Up: (health: starting) -> (healthy)/(unhealthy).
+Query: docker container inspect \
+  --format='{{.State.Health.Status}}' <name>
+Tuning: --health-interval, --health-retries, --health-start-period,
+--no-healthcheck.
+The daemon takes NO action on unhealthy: acting is the scheduler's
+job. Compose consumes it via depends_on condition service_healthy,
+which is the INSaFLU shape: web waits for the db probe. Docker
+forwards traffic to ports while the process is still starting.
+
+## Events
+docker system events        blocks and streams the daemon lifecycle
+                            feed; run in one terminal, act in another
+Lifecycle: create, attach, network connect, start, die (with
+exitCode), network disconnect, destroy.
+--since / --until bound the window; recent events are cached, so a
+crash remains visible after the fact.
+Watch for: container oom; exec_create / exec_start / exec_die
+(someone entered a container: possible security incident).
+Raw API: curl --no-buffer --unix-socket /var/run/docker.sock \
+  http://docker/events
+
+## cAdvisor (deferred to today)
+Google's per-container resource monitor, run as a container itself:
+web UI on 8080, /metrics endpoint in Prometheus format (the standard
+way Prometheus scrapes a Docker host). Needs ro bind mounts of /,
+/var/run, /sys, /var/lib/docker, /dev/disk plus --privileged.
+docker stats with history and graphs, exported for storage elsewhere.
+
+## Prometheus daemon metrics
+daemon.json: { "metrics-addr": "0.0.0.0:9323" }, restart dockerd,
+curl http://host:9323/metrics. Monitors dockerd ITSELF, not
+containers (cAdvisor's job). Book marks it experimental: stale, plain
+metrics-addr has been stable for years. Do not expose 9323 publicly.
+Rest of the stack parked in item 12.
+
+## Odds
+docker container cp         copy files in and out
+docker image save / import  image to and from tarball
+Everything the CLI does is the HTTP API underneath; the socket is
+root-equivalent, so endpoint access is the security boundary, not
+command output.
