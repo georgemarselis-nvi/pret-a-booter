@@ -440,3 +440,225 @@ export, exec, or nsenter.
 p186: the long-ID listing and the container ls output are from
 different sessions (no c58bfeffb9e6 in the list). Technique fine,
 data mismatched.
+
+## Chapter 8: Docker Compose
+
+### What Compose replaces
+
+The book opens with `scripts/shell_deploy.sh`: forty lines of `docker container run -d`
+with `|| true` on every teardown line (shrugging at failure, per line), global `export`
+blocks, and a `sleep 5` standing in for dependency ordering. Compose is the same stack
+as one declarative YAML file.
+
+### File anatomy
+
+```yaml
+version: '3'          # DEPRECATED, see note below
+services:             # what to launch
+networks:             # named networks
+volumes:              # named volumes
+```
+
+```
+2026-08-13: version: is deprecated. Compose Spec is versionless, features
+negotiated by what the binary supports. Compose v2 ignores this key and warns.
+No replacement key. name: (project name) is unrelated.
+```
+
+Compose v1 was Python, invoked as `docker-compose`. v2 is Go, a CLI plug-in,
+invoked as `docker compose`. Check with `docker compose version`.
+
+### Service keys seen in this chapter
+
+| key | meaning |
+| --- | --- |
+| `build.context` | path to build dir, relative to the compose file. Presence means Compose can build it |
+| `image` | tag to apply to the build, or to pull if no `build:` |
+| `platform` | force arch, for example `linux/amd64`. Runs under QEMU/Rosetta elsewhere |
+| `restart` | `unless-stopped` is the normal choice |
+| `environment` | env vars passed into the container |
+| `volumes` | `name:/path` (named volume) or `../host/path:/path` (bind) |
+| `networks` | which named networks to attach |
+| `ports` | `host:container`, published to the host |
+| `expose` | port visible to other containers on the network, NOT to the host |
+| `depends_on` | start ordering |
+| `labels` | metadata, here consumed by traefik |
+| `healthcheck` | see HEALTHCHECK in the Dockerfile |
+
+### depends_on and health
+
+```yaml
+depends_on:
+  mongodb:
+    condition: service_healthy
+```
+
+Bare list form waits only for *running*. The `condition: service_healthy` form waits
+for the image's `HEALTHCHECK` to pass. Startup only: Docker reports later unhealth,
+it does not act on it. A container that exits gets restarted per `restart:`, that is all.
+
+### Service discovery
+
+Containers on the same Compose network resolve each other by service name.
+`mongodb://mongodb:27017/...`, never an IP, never an FQDN. Names survive rearrangement
+and document the dependency in the file.
+
+### Project name
+
+Container and network names are prefixed by the project name, which defaults to the
+directory containing the compose file. Running in `compose/` yields
+`compose-mongodb-1`, `compose_botnet`. Override with the top-level `name:` key.
+
+### Volume prepopulation trick
+
+Compose can create empty volumes, not populated ones. To ship a preinitialized
+database:
+
+```
+docker volume create mongodb-rocketchat
+
+docker run --rm \
+    -v mongodb-rocketchat:/bitnami/mongodb \
+    -v ${PWD}:/backup busybox \
+    tar -xzvf /backup/mongodb-rocketchat.tgz -C /bitnami/mongodb
+```
+
+Ephemeral busybox, two mounts (target volume plus the backup dir), untar, exit.
+Volume survives, container does not. Pair with:
+
+```yaml
+volumes:
+  mongodb-rocketchat:
+    external: true
+```
+
+`external: true` means Compose mounts and unmounts it but does not own its lifecycle:
+`docker compose down` will not delete it.
+
+Split-host note: `${PWD}` and all `-v` paths resolve DAEMON-side. Running this from
+molly against the dockervm context untars a path on docker.marsel.is.
+
+### Commands
+
+```
+docker compose config                   # lint + print the fully resolved file
+docker compose build                    # build services with build:, skip image-only
+docker compose up -d                    # create network, volumes, containers
+docker compose logs                     # all services, color coded, time interlaced
+docker compose logs <service>           # one service
+docker compose top                      # processes per container
+docker compose exec <service> <cmd>     # -it implied, service name not container name
+docker compose stop|start <service>
+docker compose pause|unpause
+docker compose down                     # remove containers and network
+docker compose -f <file> <cmd>          # pick a non-default compose file
+```
+
+`config` failure looks like: `services.mongodb Additional property builder is not allowed`.
+
+`logs` and `exec` are the two troubleshooting commands. If the image will not build or
+the container will not start at all, fall back to plain `docker` commands.
+
+```
+docker compose exec <service> <cmd>: exec into the container backing that SERVICE
+(project's <service>-1), resolved from the compose file in the current dir. -it
+implied, service names not container names. "I have no name!" = process uid
+(bitnami: 1001) has no /etc/passwd entry in the image. UID lesson, container-side.
+```
+
+```
+Compose "validation for free", concretely:
+1. Schema: YAML checked against spec pre-daemon: unknown keys, wrong types, bad
+   port strings refused with file+line. Standalone: docker compose config
+2. References: undefined volumes/networks/depends_on targets caught before start
+3. Ordering: depends_on sequencing, consistent naming, idempotent up
+NOT validated: anything inside containers (env values), image existence,
+cross-field sanity.
+```
+
+### Variable interpolation
+
+Borrowed from shell. Three forms:
+
+```yaml
+${VAR}                        # plain
+${VAR:-default}               # default if unset OR empty
+${VAR-default}                # default if unset only (empty string is a valid value)
+${VAR:?error message}         # mandatory, fail with this message
+```
+
+Mandatory failure:
+
+```
+required variable HUBOT_ROCKETCHAT_PASSWORD is missing a value:
+  HUBOT_ROCKETCHAT_PASSWORD must be set!
+```
+
+Verify resolution without starting anything:
+
+```
+docker compose -f docker-compose-env.yaml config | grep ROCKETCHAT_PASSWORD
+VAR=value docker compose -f docker-compose-env.yaml config | grep ROCKETCHAT_PASSWORD
+```
+
+### .env
+
+Read automatically from the directory containing the compose file. Key/value pairs,
+host-side, consumed by Compose itself for interpolation.
+
+Traps:
+- NOT a shell script. Do not quote values. `PW="foo"` yields literal `"foo"`.
+- `.gitignore` it. It exists to hold the thing you must not commit.
+- Ambient pickup: it is read because it is *there*, no flag, no reference in the YAML.
+  A stale `.env` in the directory silently changes what you deploy.
+- Project `.env` (host-side, interpolation) is not `env_file:` (container-side, injects
+  vars into the container). Different mechanisms, similar names.
+
+Precedence, lowest to highest:
+
+```
+1. defaults in docker-compose.yaml
+2. .env file
+3. environment variables set in the shell
+```
+
+### Secrets
+
+```
+Secrets: env vars are the WRONG channel: visible in docker inspect, inherited by
+children, leaked to logs/crash dumps. ${VAR:-default} adds the repo-default sin on
+top. Right channel: compose secrets: -> files at /run/secrets/<name>, never in env,
+never in inspect. App reads a file, not os.environ. Jenkins credential-binding
+injects secrets as env: the cautionary example, not the model. Book covers secrets
+properly in ch11.
+```
+
+The book also notes the command-line problem it creates: `HUBOT_ROCKETCHAT_PASSWORD=x
+docker compose up` puts the password in the process list.
+
+### Override files
+
+Not covered by the book beyond one sentence, and the single most useful Compose
+feature for consuming someone else's stack.
+
+`docker-compose.override.yml` in the same directory is read automatically and merged
+on top of `docker-compose.yaml`. Merge is per-key: scalars replace, most lists append,
+maps merge. No flag needed. Explicit form:
+
+```
+docker compose -f docker-compose.yaml -f docker-compose.override.yml up -d
+```
+
+This is THE tool for modifying INSaFLU without forking their compose file: their file
+stays pristine and updatable, our changes live in a separate file we own.
+
+### Production caution
+
+Host bind mounts for state are a development convenience. In production the container
+lands on whichever node has room and loses the files. Network storage or k8s PVs.
+
+### Staleness
+
+- `version:` deprecated, see note above.
+- `docker-compose` (hyphen, Python v1) is EOL. Everything is `docker compose`.
+- Override files are documented Compose Spec, not an obscure extra.
