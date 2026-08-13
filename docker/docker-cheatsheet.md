@@ -335,3 +335,108 @@ docker image save / import  image to and from tarball
 Everything the CLI does is the HTTP API underneath; the socket is
 root-equivalent, so endpoint access is the security boundary, not
 command output.
+
+# Docker cheatsheet: chapter 7, debugging containers
+
+## The premise
+Container processes are ordinary host processes: shared kernel, host
+sees everything. Debugging mostly happens FROM THE HOST with standard
+tools; exec and nsenter are the fallback, not the front door.
+
+## Process output
+docker container top <name>     host-side ps of the container's
+                                processes, from anywhere
+UID display trap: top and host ps resolve UIDs against the HOST's
+/etc/passwd. The container's uid 101 may print as uuidd, systemd+,
+lp, or bare 101 depending on what the host has at that number. Paths
+in ps output are the container's view, not the host's.
+Mitigation the book suggests: dedicate one nonzero UID (e.g. 5000,
+user "container") on hosts AND in base images, run everything -u
+5000: readable ps, no root processes.
+
+ps axlfww    BSD forest of everything: containers hang under
+             containerd-shim-runc-v2, one shim per container.
+             dockerd is NOT their parent (live-restore fact).
+             a=all users, x=no-tty too, l=long, f=forest,
+             ww=never truncate
+ps -ejH      SysV tree, uglier
+pstree `pidof dockerd`      collapsed map: docker-proxy children,
+                            {threads} as N*[...]
+pstree -p <shim-pid>        one container's full tree with PIDs
+Alpine/BusyBox ps is crippled; full distro on daemon hosts.
+
+## Process inspection
+strace -p <hostpid>, lsof -p <hostpid>, gdb: all work from the host
+as root against container processes. lsof paths are container-view.
+Debug sidecar without touching the target image:
+  docker container run -ti --rm --cap-add=SYS_PTRACE \
+    --pid=container:<name> spkane/train-os bash
+Joins the TARGET's PID namespace: its ps shows the target's
+processes, strace -p 1 traces the target's main process. Tools come
+from the debug image, not the stripped target.
+
+## Controlling processes
+kill from the host works on any container process. Killing a
+non-PID-1 process does NOT stop the container: it leaves it in a
+state no scheduler or developer expects. Rule: replace the whole
+container instead of surgery inside it. docker container ls should
+be trustable as "the app is whole".
+Signals beyond TERM/KILL: docker container kill -s USR1 <name>
+(nginx reopens logs on USR1, etc.).
+
+## PID 1 duties
+PID 1 in a container inherits init's duties: adopt orphans, reap
+zombies, and it ignores SIGTERM without a handler. A forking app
+does none of it: zombies accumulate (Jenkins agents the classic).
+Fixes: docker run --init (docker-init = tini as PID 1; CMD passed
+through, ENTRYPOINT REPLACED), entrypoint ending in exec app, or a
+real supervisor (s6/runit/supervisord) for genuinely multi-process.
+Verify: docker container exec <n> cat /proc/1/comm -> docker-init
+Only needed for multi-parent or signal-deaf processes; tini is small
+enough to default in production.
+
+## Network inspection
+docker network ls               bridge / host / none + compose extras
+docker network inspect bridge   containers on it, their IPs, and
+                                docker0 host binding
+Containers have their own stack: they do NOT appear in host netstat
+by address. The mapped port does:
+netstat -an     port bound on 0.0.0.0
+netstat -anp    bound process is docker-proxy: one per published
+                port per family (v4+v6 = two). NO clue which
+                container: docker container ls ties port to name.
+Host networking mode: no proxy, process binds directly, shows
+normally in netstat. tcpdump etc. work; remember the proxy sits
+between host interface and container.
+Default bridge until compose/scheduler says otherwise; NAME your
+containers: name and ID are the only join key between network
+inspect and container ls.
+
+## Image history
+docker image history <image>    layers with sizes and the commands
+                                that built them, newest on top
+Answers "why is this image huge". <missing> under IMAGE is normal
+for pulled images (layer IDs unknown locally, only the top has an
+ID). --no-trunc for full commands; pipe to less -S.
+
+## Container directory on disk
+/var/lib/docker/containers/<longid>/ on the daemon host:
+  <id>-json.log     the docker logs backing store (json-file driver)
+  config.v2.json    what inspect reads
+  hostconfig.json   network/runtime config
+  hostname, hosts, resolv.conf    the files bind-mounted into the
+                                  container (chapter 5)
+Readable even when the daemon is dead or the container unenterable.
+NEVER edit: Docker expects these to reflect reality.
+
+## Filesystem inspection
+docker container diff <name>    what changed vs the image:
+                                A added, C changed
+Finds stray writes (logs, caches, .pid files): ammunition for the
+--read-only=true + tmpfs + external-syslog conclusion. Deeper look:
+export, exec, or nsenter.
+
+## Author errata this chapter
+p186: the long-ID listing and the container ls output are from
+different sessions (no c58bfeffb9e6 in the list). Technique fine,
+data mismatched.
