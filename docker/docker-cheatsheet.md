@@ -662,3 +662,191 @@ lands on whichever node has room and loses the files. Network storage or k8s PVs
 - `version:` deprecated, see note above.
 - `docker-compose` (hyphen, Python v1) is EOL. Everything is `docker compose`.
 - Override files are documented Compose Spec, not an obscure extra.
+
+## Chapter 9: The Path to Production Containers
+
+Prose chapter. One command in the whole thing. Read for the concern stack and
+the vocabulary, not for technique.
+
+### The concern stack (figure 9-1)
+
+Bottom to top. Docker owns the lower half, the "platform" owns the upper half.
+
+| Concern | Owner | Book claims it replaces |
+| --- | --- | --- |
+| Configuration, networking, resource limits, job control | Docker | VMs, Puppet/Chef, init, deploy scripts |
+| Delivery, packaging | Docker | FAT jars, tarballs, git clone, scp, rsync |
+| Logging | boundary | syslog, rsyslog, logfiles |
+| Service discovery, scheduling, monitoring | platform | static load balancers, orchestration, Nagios/Sensu, staff on call |
+| Application | you | |
+
+```
+Figure 9-1 "Replaces" column is overstated, in three places:
+
+Static load balancers: what dies is the hand-edited BACKEND LIST, not the
+load balancer. Under a scheduler the list is generated from the service
+registry. The LB becomes a k8s Service or haproxy templated from
+etcd/Consul.
+
+Nagios/Sensu: what the platform replaces is liveness-check plus restart
+(HEALTHCHECK, liveness probe, supervisor). Nagios also did metric
+thresholds, alert routing, escalation, dependency suppression. None of that
+is in the platform. You replace Nagios with Prometheus + Alertmanager, not
+with Kubernetes. The book conflates SELF-HEALING with MONITORING.
+
+Staff on call: retracted by the text on p221, "a human will still need to
+be the final line of defense". Restart fixes crashes. It does not fix bad
+config, full disks, dependency outages, or corruption, and restarting into
+those produces crashloops that page you anyway.
+```
+
+### Where-scheduling vs when-scheduling
+
+```
+"Scheduling" here means WHERE-scheduling only: kube-scheduler picks a node
+per pending pod (filter by resources/taints/affinity, score, bind).
+Placement, not timing.
+
+WHEN-scheduling is the other half: a queue, walltime, ordering by
+priority/fairshare, backfill. Slurm does both. Borg does both. Kubernetes
+dropped the queue: a pod is placeable now or Pending until something
+changes. No walltime, no completion time, so no backfill and no fairness
+across users.
+```
+
+### Networking rules for a portable container
+
+1. Let the platform map ports and tell the app what they are, usually via an
+   env var.
+2. Avoid protocols that negotiate random return ports: FTP active mode, RTSP.
+   RTSP is the camera/video streaming control channel, TCP 554 for
+   PLAY/PAUSE with video returning over separately negotiated UDP ports.
+   Same NAT breakage as FTP.
+3. Use the DNS the runtime gives the container.
+
+### Configuration
+
+```
+Booooooo. 30 years of trying to make apps have individual conf files.
+```
+
+The book's position: env vars are Docker's native mechanism and work
+everywhere. Kubernetes makes files easy (ConfigMaps) and the authors
+explicitly recommend against it, calling file-based config a crutch that hurts
+observability. Reasoning deferred to chapter 13, twelve-factor.
+
+Note that this is the opposite advice from chapter 8's secrets section, where
+env is the wrong channel and files under /run/secrets are right. Config and
+secrets are different problems: config wants visibility, secrets want the
+opposite.
+
+### Service discovery
+
+The mechanism by which an app finds the address of a service it needs. That is
+the whole definition.
+
+"Dynamic" is the container property that breaks the old answers: the container
+lands on whichever node has room, on a random published port, dies, comes back
+elsewhere. The address is not knowable at config-write time.
+
+The book's list, grouped:
+
+| Group | Mechanisms | Knows if the endpoint is alive |
+| --- | --- | --- |
+| DNS-based | round-robin DNS, SRV records, dynamic DNS, mDNS/Bonjour | no |
+| Consistent store you query | ZooKeeper, Consul, etcd | yes |
+| Address indirection | LB with well-known address, overlay with well-known address | via health check on the LB |
+
+```
+DNS was always this mechanism: SRV records did exactly this in 2000. What
+changed is not the query, it is the WRITE PATH: who updates the record when
+a container moves, and how fast. Old DNS assumed a human editing a zone
+file and TTLs in hours. Cluster DNS is the same protocol with the registry
+as authoritative source, updated in seconds, and k8s dodges TTL entirely by
+putting a stable virtual IP in front so the record never has to change.
+
+Speed of update plus who does the updating. The protocol was never the
+problem.
+```
+
+Compose's service-name DNS from chapter 8 is the simplest form of this: `dockerd`
+supplies the DNS, `mongodb://mongodb:27017` resolves. It works within one host's
+Compose network. Across a cluster the platform must provide it.
+
+Ingress into a containerized system from a traditional one is the harder
+direction and the one to solve first. Book's examples: k8s Ingress controllers
+(Traefik, Contour), Linkerd, Envoy standalone or under Istio.
+
+### The one command
+
+Test the exact image you will ship, overriding CMD at runtime:
+
+```
+docker container run -e ENVIRONMENT=testing -e API_KEY=12345 \
+    -it awesome_app:version1 /opt/awesome_app/test.sh
+```
+
+- `docker container run` exits with the exit status of the command it ran. That
+  is the pass/fail signal. Do not parse output if the exit code works.
+- Pass a precise tag, never `latest`: another build can move `latest` between
+  the trigger and the run.
+- `--entrypoint` if ENTRYPOINT and not CMD needs overriding.
+- Concessions for testing must be external switches (env vars, args), never a
+  different build.
+
+### CI workflow (figure 9-2)
+
+trigger -> build image -> tag with version/commit hash -> run container with
+the test command -> capture exit status -> mark pass/fail -> `docker image tag`
+and `docker image push` to the registry on pass.
+
+The registry is the interchange point between build and deploy.
+
+Note the split-host pattern the book uses: the test worker has the `docker` CLI
+but no daemon, and builds against a remote `dockerd`. Same shape as
+molly -> docker.marsel.is, and the same `${PWD}`/`-v` daemon-side resolution
+trap applies.
+
+### Staleness
+
+- Mesos and Aurora are dead: Apache Attic 2021 and 2020 respectively. D2iQ
+  wound down. Twitter, the flagship user, migrated to Kubernetes.
+- Swarm mode still ships but is legacy. The book already hedges this.
+- Consul is alive but compressed into mixed VM-plus-container fleets, since k8s
+  ships its own DNS and health checks.
+- "Kubernetes is not the only option" was a weaker hedge by 2026 than when
+  written. Nomad and ECS are alive; nothing else general-purpose is.
+
+### Terms introduced
+
+- **Borg**: Google's internal cluster manager, running since ~2004, EuroSys
+  2015 paper. Kubernetes is its public rewrite (Omega was the intermediate
+  attempt). Carried over: pods (Borg allocs), labels instead of hostnames,
+  declarative specs, one agent per node. NOT carried over: the queue,
+  admission control, priority tiers with preemption, and reclaiming the gap
+  between reserved and actual usage.
+- **Consul**: HashiCorp. Agent per node registers local services with health
+  checks, Raft server cluster holds the catalog, clients query by DNS or HTTP.
+  Failing checks drop a node from the answer. Also KV and, later, a mesh.
+  Difference from etcd: etcd is a generic consistent store you build discovery
+  on, Consul is discovery as the product.
+- **etcd**: sorted key space, put/get/delete/watch, leases for TTL,
+  compare-and-swap. API is an afternoon. Operating it is the work: Raft quorum
+  means odd member counts, the store must be compacted and defragmented or it
+  wedges at the 2GB default, lost quorum is restore-from-snapshot.
+- **CNI**: Container Network Interface. A plugin contract, not a network.
+  Kubelet creates the pod netns then shells out to a binary that assigns an IP
+  and plumbs the interface. k8s states the requirement (every pod gets a
+  routable IP, any pod reaches any other without NAT) and refuses to implement
+  it, because four right answers exist: overlay (VXLAN/Geneve, no cooperation
+  from the network, MTU pain), native routing (BGP/Calico, fast and
+  observable, needs the network team), cloud VPC IPs (ideal until the
+  per-instance IP limit), eBPF datapath (Cilium, replaces kube-proxy, needs
+  kernel versions). No default is right everywhere and picking one kills the
+  others commercially. Same inter-vendor seam shape as 1985 LDAP.
+- **Blue-green deploy**: run the new generation alongside the old, migrate
+  traffic across, keep the old until confident.
+- **Tetris metaphor**: Kelsey Hightower's, for the scheduler placing services
+  on servers for best fit on the fly.
+
+
