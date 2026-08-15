@@ -1,282 +1,241 @@
-# Chapter 8 lab: Docker Compose
+# Chapter 8 lab: Docker Compose (v2)
+
+Provenance marked per section: [BOOK p.N] follows the chapter's own walkthrough,
+[CLAUDE] is added material and says why it is there.
 
 Host: docker.marsel.is (10.0.0.7). Run the CLI ON the host, not via the
-dockervm context from molly. Chapter 8 uses relative bind mounts
-(`../zmachine/saves`) and `${PWD}`, both of which resolve daemon-side. The repo
-tree must be where the daemon is.
+dockervm context from molly: the stack uses relative bind mounts and ${PWD},
+both daemon-side. [CLAUDE, split-host note; the book assumes one machine]
 
 ```
 ssh gmarselis@docker.marsel.is
-git clone https://github.com/spkane/rocketchat-hubot-demo.git \
-    --config core.autocrlf=input
-cd rocketchat-hubot-demo/compose
+cd ~/src/rocketchat-hubot-demo
 ```
+
+Already cloned. Book pages below are book numbering.
 
 ---
 
-## Part 1: read before running
+## Part 1: prepopulate the data volume [BOOK p.199]
 
-```
-docker compose config
-```
-
-Prints the fully resolved file. Compare it against `docker-compose.yaml` by eye.
-Note what changed: `version:` warning, relative paths made absolute, `${VAR}`
-substituted, short-form ports expanded to long form.
-
-Break it deliberately, then fix it:
-
-```
-# add a bogus key under services.mongodb, for example: builder: yes
-docker compose config
-```
-
-Expected: `services.mongodb Additional property builder is not allowed`, with
-file and line. This is schema validation before the daemon is touched.
-
-Second break, reference rather than schema:
-
-```
-# point the mongodb service at a volume name that does not exist in volumes:
-docker compose config
-```
-
-Note that this one is also caught, and that a wrong *value* inside an
-environment variable is not.
-
----
-
-## Part 2: volume prepopulation
-
-The stack expects a preinitialized MongoDB. Compose cannot make one.
+The book does this BEFORE first compose contact. The tarball is in
+mongodb/data_volume_image, not in compose/.
 
 ```
 docker volume create mongodb-rocketchat
 
+cd mongodb/data_volume_image
 docker run --rm \
     -v mongodb-rocketchat:/bitnami/mongodb \
     -v ${PWD}:/backup busybox \
     tar -xzvf /backup/mongodb-rocketchat.tgz -C /bitnami/mongodb
+cd ../..
+```
 
-docker volume inspect mongodb-rocketchat
+[CLAUDE, one check the book skips] Look at what actually landed, so "volume
+prepopulation" is files you have seen and not an incantation:
+
+```
 docker run --rm -v mongodb-rocketchat:/data busybox ls -la /data
 ```
 
-Confirm in the compose file that this volume is declared `external: true`, and
-predict before running: after `docker compose down`, does the volume survive?
-Then check.
-
----
-
-## Part 3: up, and what got named
+## Part 2: config, build, up [BOOK p.200-201]
 
 ```
+cd compose
+docker compose config
 docker compose build
 docker compose up -d
-docker compose ps
-docker network ls | grep -i compose
-docker volume ls
 ```
 
-Observe the project prefix from the directory name: `compose-mongodb-1`,
-`compose_botnet`. Then prove where it comes from:
+Book's expected up output: network compose_botnet created, mongodb goes
+Healthy (~60s, the healthcheck gate), THEN rocketchat/zmachine/hubot start.
+Watch for that ordering: it is depends_on condition: service_healthy doing
+its startup-only job.
+
+Project prefix: everything is named compose-* because the directory is
+compose/. [BOOK p.201]
+
+[CLAUDE, deliberate breaks; the book only shows the error output on p.200,
+never makes you cause it] Break config twice, fix after each:
 
 ```
-docker compose down
-docker compose -p zork up -d
-docker compose -p zork ps
-docker compose -p zork down
+# 1. schema break: add a bogus key under services.mongodb, e.g. builder: yes
+docker compose config
+# expect: services.mongodb Additional property builder is not allowed
+
+# 2. reference break: point mongodb at a volume name not declared in volumes:
+docker compose config
 ```
 
-Same file, different names. Note that `-p` must be repeated on every command,
-which is why `name:` in the file is better.
+Both caught before the daemon is touched. A wrong VALUE inside environment:
+is not: that is the validation boundary.
 
----
-
-## Part 4: the observation pass
+## Part 3: is it up [BOOK p.201-202]
 
 ```
 docker compose logs
-docker compose logs mongodb
-docker compose logs -f hubot
+docker compose logs rocketchat | grep "SERVER RUNNING"
+```
+
+Color-coded per service, interlaced by arrival time.
+
+[CLAUDE, split-host consequence] The book now says browse to
+http://127.0.0.1:3000. That is molly-side wrong: the port is published on
+docker.marsel.is, so browse http://docker.marsel.is:3000 or tunnel. First-run
+wizard: admin user, then the general channel. Optional: type into the zmachine
+channel and play a turn of the game via hubot, which proves hubot -> zmachine
+-> back through rocketchat, the whole service-name DNS chain, from the UI.
+
+## Part 4: exercising the stack [BOOK p.205-206]
+
+The book's own sequence:
+
+```
 docker compose top
 docker compose exec mongodb bash
 ```
 
-Inside the mongodb container: `id`, `whoami`, `cat /etc/passwd | tail`. The
-prompt says `I have no name!` because uid 1001 has no passwd entry in the
-bitnami image. Confirm the uid matches what the host sees in `docker compose
-top`.
-
-Then verify service-name DNS, which is the whole point of the network section:
+Inside: the prompt is "I have no name!" because uid 1001 has no /etc/passwd
+entry in the bitnami image. Run mongosh, poke, exit. [BOOK p.206]
 
 ```
-docker compose exec hubot sh -c 'getent hosts mongodb; getent hosts zmachine'
-docker compose exec hubot sh -c 'wget -qO- http://zmachine:80/ ; echo'
+docker compose stop zmachine
+docker compose start zmachine
+docker compose pause
+docker compose unpause
 ```
 
-`zmachine` uses `expose:` not `ports:`, so this must succeed from inside and
-fail from the host:
+[BOOK p.206, per-service stop/start and whole-stack pause]
+
+[CLAUDE, closes the loop on the ch8 cheatsheet DNS entry] While it is up,
+prove service-name resolution from inside rather than trusting the YAML:
 
 ```
-curl http://localhost:80        # expect failure or the wrong service
+docker compose exec hubot sh -c 'getent hosts mongodb zmachine rocketchat'
 ```
 
----
+## Part 5: interpolation, defaults, mandatory [BOOK p.207-209]
 
-## Part 5: depends_on and health
-
-```
-docker inspect --format '{{json .State.Health}}' compose-mongodb-1 | jq
-docker compose ps
-```
-
-Find the `condition: service_healthy` in the file and connect it to what you
-just printed. Then test the boundary of the claim: kill mongodb and watch what
-Docker does and does not do about the services that depend on it.
+The book ships three compose files as a progression: hardcoded password ->
+default via ${VAR:-} -> mandatory via ${VAR:?}. Walk it with config, no
+containers needed:
 
 ```
-docker compose stop mongodb
-docker compose ps
-docker compose logs --tail 20 rocketchat
-docker compose start mongodb
+docker compose -f docker-compose-defaults.yaml config | grep ROCKETCHAT_PASSWORD
+HUBOT_ROCKETCHAT_PASSWORD="my-unique-pw" \
+    docker compose -f docker-compose-defaults.yaml config | grep ROCKETCHAT_PASSWORD
+docker compose -f docker-compose-env.yaml config
+HUBOT_ROCKETCHAT_PASSWORD=1234567 \
+    docker compose -f docker-compose-env.yaml config | grep ROCKETCHAT_PASSWORD
 ```
 
-Expected finding: dependents were not restarted, not stopped, not held. The
-condition applies at startup only.
+The mandatory failure is the error you already hit before the lab, and note
+the variable-name trap you also already hit: the YAML key is
+ROCKETCHAT_PASSWORD, the interpolated variable is HUBOT_ROCKETCHAT_PASSWORD.
+The right-hand side of ${} is what must exist in the environment. [BOOK p.209,
+trap yours]
 
----
+The book's margin note on p.208: an EMPTY variable equals unset under :-,
+use ${VAR-default} when empty string is a valid value.
 
-## Part 6: interpolation and .env
-
-Use the alternate file the chapter ships:
-
-```
-docker compose -f docker-compose-env.yaml config | grep -i password
-```
-
-Expect the mandatory-variable failure:
-`required variable HUBOT_ROCKETCHAT_PASSWORD is missing a value`.
-
-Now walk the three layers, checking with `config` at each step and never
-starting a container:
+[CLAUDE, extends the book's p.208 margin note into something you can see]
+Prove that distinction once, because it is invisible until it bites:
 
 ```
-# 1. nothing set
-docker compose -f docker-compose-env.yaml config | grep -i password
+HUBOT_ROCKETCHAT_PASSWORD= docker compose -f docker-compose-defaults.yaml config \
+    | grep ROCKETCHAT_PASSWORD     # empty -> default wins under :-
+```
 
-# 2. .env only
+[CLAUDE, extends the book's p.209 "we will address that in a few minutes"]
+The book acknowledges the password is now visible in the process list and
+defers the fix to its secrets section. The .env file is the interim mechanism
+and its traps are in the cheatsheet: not a shell script, no quotes, ambient
+pickup. One drill, five minutes:
+
+```
 echo 'HUBOT_ROCKETCHAT_PASSWORD=1234567' > .env
-docker compose -f docker-compose-env.yaml config | grep -i password
-
-# 3. shell wins over .env
-HUBOT_ROCKETCHAT_PASSWORD=shellvalue \
-    docker compose -f docker-compose-env.yaml config | grep -i password
-```
-
-Then the quoting trap:
-
-```
+docker compose -f docker-compose-env.yaml config | grep ROCKETCHAT_PASSWORD
 echo 'HUBOT_ROCKETCHAT_PASSWORD="1234567"' > .env
-docker compose -f docker-compose-env.yaml config | grep -i password
+docker compose -f docker-compose-env.yaml config | grep ROCKETCHAT_PASSWORD
+rm .env
 ```
 
-The quotes are part of the value. `.env` is not a shell script.
+Second output keeps the quotes. That is the trap, seen once, done.
 
-Then the ambient-pickup trap: rename the file and confirm the variable vanishes
-without any change to the YAML or the command line.
-
-```
-mv .env .env.disabled
-docker compose -f docker-compose-env.yaml config | grep -i password
-rm -f .env.disabled
-```
-
-Finally, the default-form distinction. Edit a value in the file to each form in
-turn and run `config` with the variable set to empty string:
+[CLAUDE, precedence drill; the book states the order on p.210 but never
+stacks all three layers at once] Same variable in all three places, check
+with config at each step:
 
 ```
-VAR=  ${VAR:-default}    # default wins, empty is treated as unset
-VAR=  ${VAR-default}     # empty string wins
+# layer 1: the YAML default only (:-bot-pw! in docker-compose-defaults.yaml)
+rm -f .env
+docker compose -f docker-compose-defaults.yaml config | grep ROCKETCHAT_PASSWORD
+
+# layer 2: .env beats the YAML default
+echo 'HUBOT_ROCKETCHAT_PASSWORD=envfile-pw' > .env
+docker compose -f docker-compose-defaults.yaml config | grep ROCKETCHAT_PASSWORD
+
+# layer 3: shell beats .env
+HUBOT_ROCKETCHAT_PASSWORD=shell-pw \
+    docker compose -f docker-compose-defaults.yaml config | grep ROCKETCHAT_PASSWORD
+
+rm .env
 ```
 
----
+Expected: bot-pw!, envfile-pw, shell-pw. YAML default < .env < shell.
 
-## Part 7: override file (the INSaFLU rehearsal)
+## Part 6: override file [CLAUDE, not in the chapter]
 
-Do not edit `docker-compose.yaml`. Create `docker-compose.override.yml` beside
-it:
+The book mentions override files in one sentence and never demonstrates.
+This is here because it is the exact mechanism for INSaFLU: their compose
+file stays pristine, our changes live beside it. This is the INSaFLU
+rehearsal, five minutes.
+
+Create docker-compose.override.yml next to docker-compose.yaml:
 
 ```yaml
 services:
-  mongodb:
-    environment:
-      LAB_MARKER: "chapter8"
   zmachine:
     ports:
       - "8081:80"
-```
-
-Then:
-
-```
-docker compose config | grep -A5 -i 'lab_marker\|8081'
-```
-
-Confirm three things in the resolved output:
-
-1. It was picked up with no flag, because of the filename.
-2. `environment` merged rather than replaced: the original variables are still
-   there alongside `LAB_MARKER`.
-3. `ports` appended: zmachine now has a published port it did not have, and its
-   `expose` is untouched.
-
-Then prove the explicit form is equivalent:
-
-```
-docker compose -f docker-compose.yaml -f docker-compose.override.yml config \
-    | diff - <(docker compose config)
-```
-
-Now a replacing key rather than a merging one. Add to the override:
-
-```yaml
-services:
   mongodb:
     restart: "no"
 ```
 
-Check `config`: scalar replaced, not appended. This is the merge rule that
-matters when you write the real override against INSaFLU.
+```
+docker compose config | grep -A3 'zmachine:\|mongodb:'
+```
 
----
+Confirm: picked up with no flag (filename convention), ports APPENDED
+(zmachine gains 8081, keeps expose), restart REPLACED (scalar). That is the
+whole merge model: maps merge, lists append, scalars replace.
 
-## Part 8: teardown, and what is left
+```
+rm docker-compose.override.yml
+```
+
+## Part 7: teardown [BOOK p.206 + p.199 margin note]
 
 ```
 docker compose down
 docker volume ls | grep rocketchat
-docker network ls | grep compose
 ```
 
-Volume still there, because `external: true`. Network gone. Explain to yourself
-why that asymmetry is the right default.
-
-Cleanup:
-
-```
-docker compose down --rmi local
-docker volume rm mongodb-rocketchat
-rm -f .env docker-compose.override.yml
-```
+Volume survives: external to the stack's lifecycle, and the book's p.199
+margin note says you can keep it or docker volume rm it to start fresh.
+Network is gone. [CLAUDE, one sentence] That asymmetry is the right default:
+the network is structure, the volume is data.
 
 ---
 
 ## Findings to record
 
-- Whether `depends_on: condition: service_healthy` did anything at all after
-  startup (predicted: no).
-- The exact precedence result from Part 6, in your own words.
+- The up ordering you observed: how long mongodb took to go Healthy, and
+  that nothing else started before it.
+- The variable-name trap, in your own words.
 - Which override keys merged and which replaced.
-- Anything that behaved differently on Docker 29.7.1 with the containerd image
-  store than the 2023 book describes.
+- Anything Docker 29.7.1 / containerd store did differently from the book's
+  2023 output.
+
+
