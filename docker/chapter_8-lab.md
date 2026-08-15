@@ -18,6 +18,11 @@ Already cloned. Book pages below are book numbering.
 
 ## Part 1: prepopulate the data volume [BOOK p.199]
 
+What this demonstrates: Compose can create empty volumes but not populated
+ones. The chapter's stack needs a preinitialized MongoDB, so the gap is
+closed by hand before Compose is ever run: an ephemeral container mounts the
+target volume plus the backup dir, untars, exits. The volume outlives it.
+
 The book does this BEFORE first compose contact. The tarball is in
 mongodb/data_volume_image, not in compose/.
 
@@ -40,6 +45,11 @@ docker run --rm -v mongodb-rocketchat:/data busybox ls -la /data
 ```
 
 ## Part 2: config, build, up [BOOK p.200-201]
+
+What this demonstrates: the chapter's core claim, one YAML file replaces the
+forty-line shell_deploy.sh from its opening. config validates before the
+daemon is touched, build handles only services with build:, up creates
+network, containers and startup ordering in one command.
 
 ```
 cd compose
@@ -73,6 +83,10 @@ is not: that is the validation boundary.
 
 ## Part 3: is it up [BOOK p.201-202]
 
+What this demonstrates: the two commands the book calls the most useful for
+troubleshooting, logs here, exec in Part 4. Stack-scoped rather than
+host-scoped: this is the Compose delta over plain docker logs.
+
 ```
 docker compose logs
 docker compose logs rocketchat | grep "SERVER RUNNING"
@@ -88,6 +102,11 @@ channel and play a turn of the game via hubot, which proves hubot -> zmachine
 -> back through rocketchat, the whole service-name DNS chain, from the UI.
 
 ## Part 4: exercising the stack [BOOK p.205-206]
+
+What this demonstrates: the book's "Exercising Docker Compose" section by
+name. Familiar docker commands re-scoped to the stack: top and exec take a
+SERVICE name resolved from the compose file in the current directory, not a
+container name, and lifecycle commands work per-service or whole-stack.
 
 The book's own sequence:
 
@@ -116,6 +135,12 @@ docker compose exec hubot sh -c 'getent hosts mongodb zmachine rocketchat'
 ```
 
 ## Part 5: interpolation, defaults, mandatory [BOOK p.207-209]
+
+What this demonstrates: the chapter's "Managing Configuration" section. The
+same stack made configurable without editing the file: interpolation
+borrowed from the shell, a default for the common case, a hard failure for
+the value that must not have one. config is the verification tool
+throughout, nothing needs to start.
 
 The book ships three compose files as a progression: hardcoded password ->
 default via ${VAR:-} -> mandatory via ${VAR:?}. Walk it with config, no
@@ -217,6 +242,10 @@ rm docker-compose.override.yml
 
 ## Part 7: teardown [BOOK p.206 + p.199 margin note]
 
+What this demonstrates: down removes what Compose owns (containers,
+network) and leaves what it does not (the external volume). The boundary of
+the stack's lifecycle, seen once.
+
 ```
 docker compose down
 docker volume ls | grep rocketchat
@@ -237,5 +266,3 @@ the network is structure, the volume is data.
 - Which override keys merged and which replaced.
 - Anything Docker 29.7.1 / containerd store did differently from the book's
   2023 output.
-
-
