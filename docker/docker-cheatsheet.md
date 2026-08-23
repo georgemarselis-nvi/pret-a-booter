@@ -850,3 +850,181 @@ trap applies.
   on servers for best fit on the fly.
 
 
+# Chapter 10: Containers at Scale
+
+Lab forms of the swarm commands use ssh://d.m and lab node names; the
+book uses -H 172.17.4.1 and AWS hostnames. Full narrative in
+chapter_10-lab.md.
+
+## Swarm mode
+
+[BOOK p.235] Init and join. The join token is stored cluster state, not
+generated per query: same token every time until rotated, treat as
+secret.
+
+```
+docker -H ssh://d.m swarm init --advertise-addr 10.0.0.7
+docker -H ssh://d.m swarm join-token worker
+docker -H ssh://d.m swarm join-token --quiet worker
+docker -H ssh://d.m swarm join-token --rotate worker
+docker -H ssh://d.m swarm join-token manager
+docker --context sw1 swarm join --token <token> 10.0.0.7:2377
+docker -H ssh://d.m node ls
+docker -H ssh://d.m node promote <node>
+docker -H ssh://d.m node demote <node>
+```
+
+[CLAUDE, exercised in lab section 5, not in book] Hardening:
+
+```
+docker -H ssh://d.m swarm update --autolock=true
+docker -H ssh://d.m swarm unlock
+docker -H ssh://d.m swarm unlock-key
+docker -H ssh://d.m swarm ca --rotate
+docker -H ssh://d.m network create --driver overlay --opt encrypted secure-net
+```
+
+[BOOK p.236-238] Services. Never use the latest tag in production: it
+floats, deployments become unrepeatable.
+
+```
+docker -H ssh://d.m service create --detach=true --name quantum --replicas 2 --publish published=80,target=8080 --network secure-net spkane/quantum-game:latest
+docker -H ssh://d.m service ls
+docker -H ssh://d.m service ps quantum
+docker -H ssh://d.m service ps -f "desired-state=running" quantum
+docker -H ssh://d.m service inspect --pretty quantum
+docker -H ssh://d.m service scale --detach=false quantum=4
+```
+
+[BOOK p.240-241] Updates and rollback. service update --image: the
+manager resolves the tag to a digest once, so all nodes run the same
+bits.
+
+```
+docker -H ssh://d.m service update --update-delay 10s --update-failure-action rollback --update-monitor 5s --update-order start-first --update-parallelism 1 --image <image> quantum
+docker -H ssh://d.m service rollback quantum
+```
+
+update-order stop-first is the default (seen in service inspect
+UpdateConfig); start-first brings the new task up before killing the
+old, needs headroom for both.
+
+[BOOK p.241-242] Stacks: compose file as swarm deployment unit.
+
+```
+docker -H ssh://d.m stack deploy --compose-file docker-compose-stack.yaml rocketchat
+docker -H ssh://d.m stack ls
+docker -H ssh://d.m stack ps -f "desired-state=running" rocketchat
+docker -H ssh://d.m stack rm rocketchat
+```
+
+[BOOK p.243] Drain for maintenance, reactivate after:
+
+```
+docker -H ssh://d.m node update --availability drain swarm2.marsel.is
+docker -H ssh://d.m node inspect --pretty swarm2.marsel.is
+docker -H ssh://d.m node update --availability active swarm2.marsel.is
+```
+
+Routing mesh: a published port answers on every node, not only nodes
+running a task. Default ingress overlay is 10.0.0.0/24 and collides with
+our LAN; lab section 6 recreates it on 10.255.0.0/16 with --opt
+encrypted.
+
+```
+docker -H ssh://d.m swarm leave --force
+```
+
+## Kubernetes on minikube
+
+[BOOK p.246-249] Lifecycle. Dashboard port is random per run; keep the
+command running, Ctrl-C exits.
+
+```
+minikube start
+minikube status
+minikube dashboard --url
+minikube stop
+minikube delete
+```
+
+[BOOK p.254-256] First deployment. minikube introspected the
+containerPort; our echo-server needed --port stated. Chained: Deployment
+creates ReplicaSet creates pod.
+
+```
+kubectl create deployment hello-minikube --image=kicbase/echo-server:1.0
+kubectl expose deployment hello-minikube --type=NodePort --port=8080
+kubectl get all
+kubectl get services
+minikube service hello-minikube --url
+curl -H foo:bar $(minikube service hello-minikube --url)/get
+kubectl delete service hello-minikube
+kubectl delete deployment hello-minikube
+```
+
+kubectl get all is a curated subset: PersistentVolumeClaims and others
+need their own get.
+
+[BOOK p.257-262] Manifests. One file, --- separated objects; -f takes a
+file, directory, URL or - for stdin.
+
+```
+kubectl apply -f ./lazyraster-service.yaml
+kubectl get pvc
+kubectl delete -f ./lazyraster-service.yaml
+```
+
+[BOOK p.263-264] Scale and logs. The deployment scales, not the
+service. Logs for a deployment pick one pod; name the pod for a specific
+one.
+
+```
+kubectl scale --replicas=2 deploy/lazyraster
+kubectl get deployment/lazyraster
+kubectl logs deployment/lazyraster
+kubectl logs pod/<pod-name>
+```
+
+[BOOK p.266-267] Contexts: one kubeconfig, many clusters.
+
+```
+kubectl config current-context
+kubectl config use-context <name> --namespace=default
+kubectl config unset current-context
+kubectl cluster-info
+kubectl config view --minify
+```
+
+[CLAUDE, from the kubeadm redo, lab section 11] Not in the book but the
+commands the redo added:
+
+```
+sudo kubeadm init --pod-network-cidr=10.244.0.0/16
+kubectl apply -f https://github.com/flannel-io/flannel/releases/latest/download/kube-flannel.yml
+kubectl taint nodes --all node-role.kubernetes.io/control-plane-
+kubectl describe pod <pod>
+kubectl describe pvc <claim>
+sudo kubeadm reset -f
+```
+
+## ECS and Fargate
+
+[BOOK p.270-284] Read only, no AWS account in the lab. The task
+definition JSON is their compose file; the shape to remember:
+
+```
+aws ecs create-cluster --cluster-name fargate-testing
+aws ecs register-task-definition --cli-input-json file://./webgame-task.json
+aws ecs list-task-definitions
+aws ecs create-service --cluster fargate-testing --service-name web-game --launch-type FARGATE
+aws ecs list-services --cluster fargate-testing
+aws ecs describe-services --cluster fargate-testing
+aws ecs list-tasks --cluster fargate-testing
+aws ecs delete-service --cluster fargate-testing
+aws ecs delete-cluster --cluster fargate-testing
+```
+
+Fargate is a launch type: ECS without owning the EC2 nodes, per-second
+billing, one-minute minimum. Sane for batch and spiky loads, roughly
+double EC2 for steady 24/7.
