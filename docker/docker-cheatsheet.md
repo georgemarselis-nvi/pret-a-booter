@@ -1028,3 +1028,59 @@ aws ecs delete-cluster --cluster fargate-testing
 Fargate is a launch type: ECS without owning the EC2 nodes, per-second
 billing, one-minute minimum. Sane for batch and spiky loads, roughly
 double EC2 for steady 24/7.
+
+# Chapter 11: Advanced Topics
+
+## Rootless mode [BOOK p.302-308]
+dockerd-rootless-setuptool.sh install        # as target user
+sudo loginctl enable-linger username         # daemon survives logout
+# daemon + containers run entirely as the user
+# image store: ~/.local/share/docker, per user, separate from root daemon
+# socket: $XDG_RUNTIME_DIR/docker.sock (/run/user/N/docker.sock)
+# --privileged in rootless grants only what the user already has:
+#   host PID 1 proc mount fails, low ports fail, host devices absent
+
+## Privileged containers [BOOK p.309-313]
+docker container run --rm -ti --privileged spkane/train-os /bin/bash
+# --privileged = all caps, no seccomp, no cgroup device limits, /dev visible
+# demo: ip link set eth0 address ... works under --privileged, fails without
+--cap-add NET_ADMIN / --cap-drop ...         # surgical alternative to --privileged
+
+## seccomp [BOOK p.313-316]
+docker container run --security-opt seccomp=profile.json ...
+docker container run --security-opt seccomp=unconfined ...
+# default profile blocks ~44 syscalls; unconfined disables filtering
+
+## SELinux / AppArmor [BOOK p.316-317]
+# LSM enforcement is in the kernel, on every syscall, after DAC
+# volume relabel: -v host:/ctr:z (shared) / :Z (private)
+
+## Networking [BOOK p.318-324]
+# default bridge path: eth0 -> NAT -> docker0 -> veth -> container
+# inbound published port: docker-proxy or iptables DNAT
+# outbound: NAT (masquerade), one-way; docker-proxy not involved
+docker network ls
+# drivers: bridge, host, none, overlay (swarm scope), macvlan (real MAC
+#   per container on the physical L2)
+--net=host                                    # no netns: host interfaces, IPs,
+#   hostname, port space; bind in ctr = bind on host
+
+## Storage drivers [BOOK p.325-328]
+docker info | grep -i storage
+# overlay2: preferred
+# btrfs: worth exploring after overlay2 where available
+# devicemapper: block-level; checkered history, pick another when possible;
+#   loop-lvm default slow, dev-only; direct-lvm for real use
+
+## Debugging with nsenter / namespace joins [BOOK p.329-332]
+sudo nsenter --target PID --mount --uts --ipc --net --pid /bin/bash
+docker container run --rm -it --pid=container:NAME spkane/train-os sh
+# own mount ns (own tools) + target pid ns = debug containers without shells
+docker container run --rm -it --net=container:NAME ...
+
+## Structure of Docker [BOOK p.333-339]
+# dockerd -> containerd -> shim -> runc -> container
+# shim survives daemon restarts; runc exits after container start
+systemctl status containerd docker
+
+
