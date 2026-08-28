@@ -1083,4 +1083,15 @@ docker container run --rm -it --net=container:NAME ...
 # shim survives daemon restarts; runc exits after container start
 systemctl status containerd docker
 
-
+Chapters 12-14 were read and judged prose-only: no
+cheatsheet entries warranted. Chapter 12 covers desktop
+GUI tooling (Rancher/Podman Desktop) irrelevant to server
+estates; its one durable artifact, nerdctl, was actioned
+directly into the pret-a-booter preseeds. Chapter 13
+restates The Twelve-Factor App (2011) uncritically,
+including config-in-environment-variables and its
+attendant secret-leakage advice; the durable half (one
+artifact across environments, config injected at deploy)
+is standard practice, the mechanism is dated. Chapter 14
+is a two-page conclusion. Read for completeness, nothing
+to extract.
