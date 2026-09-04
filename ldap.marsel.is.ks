@@ -1,5 +1,5 @@
 # Version: 0.1
-# Host: bigend.marsel.is
+# Host: ldap.marsel.is
 
 text
 reboot
