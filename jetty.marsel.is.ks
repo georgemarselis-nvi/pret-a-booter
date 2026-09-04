@@ -1,11 +1,11 @@
-# Version: 0.1
+# Version: 0.2
 # Host: jetty.marsel.is
 # Tear down, from molly:
 # virsh --connect qemu+ssh://3jane/system destroy jetty.marsel.is; virsh --connect qemu+ssh://3jane/system undefine jetty.marsel.is --nvram --remove-all-storage
 # After roll, from molly:
 # ssh -o StrictHostKeyChecking=accept-new j.m
 # Roll, from molly:
-# /usr/bin/time /usr/bin/virt-install --connect qemu+ssh://3jane/system --name jetty.marsel.is --memory 4096 --vcpus 2 --disk pool=default,size=40,format=qcow2 --location https://repo.almalinux.org/almalinux/9.8/BaseOS/x86_64/os/ --os-variant almalinux9 --boot uefi --network bridge=br-eno2,model=e1000 --graphics none --console pty,target_type=serial --initrd-inject /home/gmarselis/src/pret-a-booter/jetty.marsel.is.ks --extra-args="console=ttyS0,115200n8 inst.text inst.ks=file:/jetty.marsel.is.ks" --wait=-1
+# # /usr/bin/time /usr/bin/virt-install --connect qemu+ssh://3jane/system --name jetty.marsel.is --memory 4096 --vcpus 4 --disk pool=default,size=40,format=qcow2 --location https://repo.almalinux.org/almalinux/9.8/BaseOS/x86_64/os/ --os-variant almalinux9 --boot uefi --network bridge=br-eno2,model=e1000 --graphics none --console pty,target_type=serial --initrd-inject /home/gmarselis/src/pret-a-booter/jetty.marsel.is.ks --extra-args="console=ttyS0,115200n8 inst.text inst.ks=file:/jetty.marsel.is.ks" --wait=-1
 
 text
 reboot
@@ -51,6 +51,8 @@ curl
 gnupg2
 parted
 nmap
+# for tomcat and jetty
+java-17-openjdk-headless
 ## remove
 -polkit
 -polkit-pkla-compat
