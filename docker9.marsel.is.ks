@@ -1,4 +1,4 @@
-# Version: 0.1
+# Version: 0.2
 # Host: docker9.marsel.is
 # Tear down, from molly:
 # virsh --connect qemu+ssh://3jane/system destroy docker9.marsel.is; virsh --connect qemu+ssh://3jane/system undefine docker9.marsel.is --nvram --remove-all-storage
@@ -133,6 +133,21 @@ EOF
 /usr/bin/dnf install -y docker-ce docker-ce-cli containerd.io docker-buildx-plugin
 /usr/bin/systemctl enable docker.service
 /usr/sbin/usermod -aG docker gmarselis
+
+#
+# FEIDE proxy: the container's slapd runs as ldap (uid and gid 55) and
+# reads the LDAPS key straight from the mount, so the host gets the same
+# ldap user and the key is owned by it. The key is a self-signed test
+# certificate for ldap.vetinst.no; Sikt will not accept it.
+/usr/sbin/groupadd -r -g 55 ldap
+/usr/sbin/useradd -r -u 55 -g 55 -d /var/lib/ldap -s /sbin/nologin -c "LDAP User" ldap
+/usr/bin/certtool --generate-privkey --outfile /etc/pki/tls/private/feide.key
+/usr/bin/printf 'organization = "Veterinærinstituttet"\nunit = "VI"\nlocality = "Ås"\nstate = "Akershus"\ncountry = NO\ncn = "ldap.vetinst.no"\nemail = "feide@vetinst.no"\ndns_name = "ldap.vetinst.no"\nexpiration_days = 30\ntls_www_server\nsigning_key\nencryption_key\n' > /root/feide.template
+/usr/bin/certtool --generate-self-signed --load-privkey /etc/pki/tls/private/feide.key --outfile /etc/pki/tls/certs/feide.crt --template /root/feide.template
+/usr/bin/rm -f /root/feide.template
+/usr/bin/chown ldap:ldap /etc/pki/tls/private/feide.key
+/usr/bin/chmod 0400 /etc/pki/tls/private/feide.key
+/usr/bin/mkdir -p /etc/feide
 
 #
 # The Last Upgrade
