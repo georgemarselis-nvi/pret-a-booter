@@ -1,9 +1,9 @@
-# Version: 0.2
+# Version: 0.3
 # Host: docker9.marsel.is
 # Tear down, from molly:
 # virsh --connect qemu+ssh://3jane/system destroy docker9.marsel.is; virsh --connect qemu+ssh://3jane/system undefine docker9.marsel.is --nvram --remove-all-storage
 # After roll, from molly:
-# ssh -o StrictHostKeyChecking=accept-new docker9.marsel.is
+# ssh -o StrictHostKeyChecking=accept-new almalinux@docker9.marsel.is
 # Roll, from molly:
 # /usr/bin/time /usr/bin/virt-install --connect qemu+ssh://3jane/system --name docker9.marsel.is --memory 4096 --vcpus 2 --disk pool=default,size=40,format=qcow2 --location https://repo.almalinux.org/almalinux/9.8/BaseOS/x86_64/os/ --os-variant almalinux9 --boot uefi --network bridge=br-eno2,model=e1000 --graphics none --console pty,target_type=serial --initrd-inject /home/gmarselis/src/pret-a-booter/docker9.marsel.is.ks --extra-args="console=ttyS0,115200n8 inst.text inst.ks=file:/docker9.marsel.is.ks" --wait=-1
 
@@ -37,9 +37,9 @@ part / --fstype=xfs --grow
 rootpw --lock
 
 # User
-user --name=gmarselis --groups=wheel --password=! --iscrypted
-sshkey --username=gmarselis "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIL5G39vHZAQFo6BuFfJtIFUR/4DyQtf9KIIy4jJlcBQt gmarselis@molly.vetinst.no"
-sshkey --username=gmarselis "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIDFEXqWvm+k3k+UNq+c66di1Dav5bOact+DzstO8vrjX gmarselis@3jane.vetinst.no"
+user --name=almalinux --groups=wheel --password=! --iscrypted
+sshkey --username=almalinux "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIL5G39vHZAQFo6BuFfJtIFUR/4DyQtf9KIIy4jJlcBQt gmarselis@molly.vetinst.no"
+sshkey --username=almalinux "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIDFEXqWvm+k3k+UNq+c66di1Dav5bOact+DzstO8vrjX gmarselis@3jane.vetinst.no"
 
 # Packages
 %packages
@@ -71,8 +71,8 @@ openldap-clients
 
 # Post-install
 %post --log=/root/ks-post.log
-echo "%wheel ALL=(ALL) NOPASSWD: ALL" > /etc/sudoers.d/gmarselis
-/usr/bin/chmod 440 /etc/sudoers.d/gmarselis
+echo "%wheel ALL=(ALL) NOPASSWD: ALL" > /etc/sudoers.d/almalinux
+/usr/bin/chmod 440 /etc/sudoers.d/almalinux
 # make sure the machine is named before anything else
 /usr/bin/hostnamectl --static docker9.marsel.is
 /usr/bin/hostnamectl --pretty docker9
@@ -132,7 +132,7 @@ EOF
 /usr/bin/dnf config-manager --add-repo https://download.docker.com/linux/rhel/docker-ce.repo
 /usr/bin/dnf install -y docker-ce docker-ce-cli containerd.io docker-buildx-plugin
 /usr/bin/systemctl enable docker.service
-/usr/sbin/usermod -aG docker gmarselis
+/usr/sbin/usermod -aG docker almalinux
 
 #
 # FEIDE proxy: the container's slapd runs as ldap (uid and gid 55) and
