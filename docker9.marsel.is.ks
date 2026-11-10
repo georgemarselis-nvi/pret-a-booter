@@ -1,4 +1,4 @@
-# Version: 0.3
+# Version: 0.4
 # Host: docker9.marsel.is
 # Tear down, from molly:
 # virsh --connect qemu+ssh://3jane/system destroy docker9.marsel.is; virsh --connect qemu+ssh://3jane/system undefine docker9.marsel.is --nvram --remove-all-storage
@@ -148,6 +148,25 @@ EOF
 /usr/bin/chown ldap:ldap /etc/pki/tls/private/feide.key
 /usr/bin/chmod 0400 /etc/pki/tls/private/feide.key
 /usr/bin/mkdir -p /etc/feide
+
+#
+# Journal forwarding, off by default. Everything on this host, slapd and
+# the container included, lands in the journal, so shipping the journal
+# ships all of it. To turn it on, uncomment the block below, set URL to
+# your receiver (systemd-journal-remote, or anything that speaks its
+# HTTP) and point the three certificate lines at files the receiver
+# trusts. systemd-journal-remote is in AlmaLinux AppStream.
+#
+# /usr/bin/dnf install -y systemd-journal-remote
+# /usr/bin/cat > /etc/systemd/journal-upload.conf << 'EOF_JOURNAL'
+# [Upload]
+# URL=https://logs.example.no:19532
+# ServerKeyFile=/etc/pki/tls/private/journal-upload.key
+# ServerCertificateFile=/etc/pki/tls/certs/journal-upload.crt
+# TrustedCertificateFile=/etc/pki/tls/certs/journal-ca.crt
+# NetworkTimeoutSec=5min
+# EOF_JOURNAL
+# /usr/bin/systemctl enable systemd-journal-upload.service
 
 #
 # The Last Upgrade
