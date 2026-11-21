@@ -1,11 +1,14 @@
-# Version: 0.5
-# Host: docker9.marsel.is
+# Version: 0.1
+# Host: docker9-rocky.marsel.is
+# Purpose: test machine for the presentation on Docker on Saga on 14 December
+# 2026. It runs Rocky Linux 9.6, the release Saga runs, so the demo behaves
+# as it will on Saga.
 # Tear down, from molly:
-# virsh --connect qemu+ssh://3jane/system destroy docker9.marsel.is; virsh --connect qemu+ssh://3jane/system undefine docker9.marsel.is --nvram --remove-all-storage
+# virsh --connect qemu+ssh://3jane/system destroy docker9-rocky.marsel.is; virsh --connect qemu+ssh://3jane/system undefine docker9-rocky.marsel.is --nvram --remove-all-storage
 # After roll, from molly:
-# ssh -o StrictHostKeyChecking=accept-new almalinux@docker9.marsel.is
+# ssh -o StrictHostKeyChecking=accept-new rocky@docker9-rocky.marsel.is
 # Roll, from molly:
-# /usr/bin/time /usr/bin/virt-install --connect qemu+ssh://3jane/system --name docker9.marsel.is --memory 4096 --vcpus 2 --disk pool=default,size=40,format=qcow2 --location https://repo.almalinux.org/almalinux/9.8/BaseOS/x86_64/os/ --os-variant almalinux9 --boot uefi --network bridge=br-eno2,model=e1000 --graphics none --console pty,target_type=serial --initrd-inject /home/gmarselis/src/pret-a-booter/docker9.marsel.is.ks --extra-args="console=ttyS0,115200n8 inst.text inst.ks=file:/docker9.marsel.is.ks" --wait=-1
+# /usr/bin/time /usr/bin/virt-install --connect qemu+ssh://3jane/system --name docker9-rocky.marsel.is --memory 4096 --vcpus 2 --disk pool=default,size=40,format=qcow2 --location https://dl.rockylinux.org/vault/rocky/9.6/BaseOS/x86_64/os/ --os-variant rocky9 --boot uefi --network bridge=br-eno2,model=e1000 --graphics none --console pty,target_type=serial --initrd-inject /home/gmarselis/src/pret-a-booter/docker9-rocky.marsel.is.ks --extra-args="console=ttyS0,115200n8 inst.text inst.ks=file:/docker9-rocky.marsel.is.ks" --wait=-1
 
 text
 reboot
@@ -18,11 +21,12 @@ keyboard us
 timezone Europe/Oslo --utc
 
 # Network
-network --bootproto=static --ip=10.0.0.16 --netmask=255.255.255.0 --gateway=10.0.0.138 --nameserver=1.1.1.1 --hostname=docker9.marsel.is
+network --bootproto=static --ip=10.0.0.136 --netmask=255.255.255.0 --gateway=10.0.0.138 --nameserver=1.1.1.1 --hostname=docker9-rocky.marsel.is
 
 # Mirror
-url --url=https://repo.almalinux.org/almalinux/9.8/BaseOS/x86_64/os/
-repo --name=AppStream --baseurl=https://repo.almalinux.org/almalinux/9.8/AppStream/x86_64/os/
+# Rocky Linux 9.6 is superseded, so it lives in the vault. Saga runs 9.6.
+url --url=https://dl.rockylinux.org/vault/rocky/9.6/BaseOS/x86_64/os/
+repo --name=AppStream --baseurl=https://dl.rockylinux.org/vault/rocky/9.6/AppStream/x86_64/os/
 
 # Partitioning
 bootloader --timeout=1 --append="console=ttyS0,115200n8"
@@ -37,9 +41,9 @@ part / --fstype=xfs --grow
 rootpw --lock
 
 # User
-user --name=almalinux --groups=wheel --password=! --iscrypted
-sshkey --username=almalinux "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIL5G39vHZAQFo6BuFfJtIFUR/4DyQtf9KIIy4jJlcBQt gmarselis@molly.vetinst.no"
-sshkey --username=almalinux "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIDFEXqWvm+k3k+UNq+c66di1Dav5bOact+DzstO8vrjX gmarselis@3jane.vetinst.no"
+user --name=rocky --groups=wheel --password=! --iscrypted
+sshkey --username=rocky "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIL5G39vHZAQFo6BuFfJtIFUR/4DyQtf9KIIy4jJlcBQt gmarselis@molly.vetinst.no"
+sshkey --username=rocky "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIDFEXqWvm+k3k+UNq+c66di1Dav5bOact+DzstO8vrjX gmarselis@3jane.vetinst.no"
 
 # Packages
 %packages
@@ -71,11 +75,40 @@ openldap-clients
 
 # Post-install
 %post --log=/root/ks-post.log
-echo "%wheel ALL=(ALL) NOPASSWD: ALL" > /etc/sudoers.d/almalinux
-/usr/bin/chmod 440 /etc/sudoers.d/almalinux
+echo "%wheel ALL=(ALL) NOPASSWD: ALL" > /etc/sudoers.d/rocky
+/usr/bin/chmod 440 /etc/sudoers.d/rocky
 # make sure the machine is named before anything else
-/usr/bin/hostnamectl --static docker9.marsel.is
-/usr/bin/hostnamectl --pretty docker9
+/usr/bin/hostnamectl --static docker9-rocky.marsel.is
+/usr/bin/hostnamectl --pretty docker9-rocky
+
+## pin to 9.6
+# The stock Rocky repositories follow the newest 9.x release, so the
+# first dnf call would move the machine to 9.7. Point BaseOS, AppStream
+# and extras at the 9.6 vault before anything else touches dnf.
+/usr/bin/dnf config-manager --set-disabled baseos appstream extras
+/usr/bin/cat > /etc/yum.repos.d/rocky-vault-9.6.repo << 'EOF'
+[baseos-vault]
+name=Rocky Linux 9.6 - BaseOS (vault)
+baseurl=https://dl.rockylinux.org/vault/rocky/9.6/BaseOS/$basearch/os/
+gpgcheck=1
+enabled=1
+gpgkey=file:///etc/pki/rpm-gpg/RPM-GPG-KEY-Rocky-9
+
+[appstream-vault]
+name=Rocky Linux 9.6 - AppStream (vault)
+baseurl=https://dl.rockylinux.org/vault/rocky/9.6/AppStream/$basearch/os/
+gpgcheck=1
+enabled=1
+gpgkey=file:///etc/pki/rpm-gpg/RPM-GPG-KEY-Rocky-9
+
+[extras-vault]
+name=Rocky Linux 9.6 - Extras (vault)
+baseurl=https://dl.rockylinux.org/vault/rocky/9.6/extras/$basearch/os/
+gpgcheck=1
+enabled=1
+gpgkey=file:///etc/pki/rpm-gpg/RPM-GPG-KEY-Rocky-9
+EOF
+
 # disable services
 /usr/bin/systemctl disable fwupd.service
 /usr/bin/systemctl mask fwupd.service
@@ -128,11 +161,11 @@ EOF
 /usr/bin/sed -i 's/^#*GSSAPIAuthentication.*/GSSAPIAuthentication no/'          /etc/ssh/sshd_config    # disable kerberos   auth
 
 #
-# Docker CE: not in AlmaLinux, comes from download.docker.com
+# Docker CE: not in Rocky Linux, comes from download.docker.com
 /usr/bin/dnf config-manager --add-repo https://download.docker.com/linux/rhel/docker-ce.repo
-/usr/bin/dnf install -y docker-ce docker-ce-cli containerd.io docker-buildx-plugin docker-compose-plugin
+/usr/bin/dnf install -y docker-ce docker-ce-cli containerd.io docker-buildx-plugin
 /usr/bin/systemctl enable docker.service
-/usr/sbin/usermod -aG docker almalinux
+/usr/sbin/usermod -aG docker rocky
 
 #
 # FEIDE proxy: the container's slapd runs as ldap (uid and gid 55) and
@@ -155,7 +188,7 @@ EOF
 # ships all of it. To turn it on, uncomment the block below, set URL to
 # your receiver (systemd-journal-remote, or anything that speaks its
 # HTTP) and point the three certificate lines at files the receiver
-# trusts. systemd-journal-remote is in AlmaLinux AppStream.
+# trusts. systemd-journal-remote is in Rocky Linux AppStream.
 #
 # /usr/bin/dnf install -y systemd-journal-remote
 # /usr/bin/cat > /etc/systemd/journal-upload.conf << 'EOF_JOURNAL'
@@ -170,9 +203,11 @@ EOF
 
 #
 # The Last Upgrade
+# Stays on 9.6: the stock repositories were disabled above.
 /usr/bin/dnf upgrade -y --refresh
 
 # install epel-release packages that could not be installed before the repo was configured
+/usr/bin/dnf install -y ncdu
 /usr/bin/dnf install -y etckeeper
 
 # etckeeper: init now, first commit after first boot
@@ -193,8 +228,5 @@ WantedBy=multi-user.target
 EOF
 
 /usr/bin/systemctl enable etckeeper-initial-commit.service
-
-# The very last upgrade, after everything above has been installed
-/usr/bin/dnf upgrade -y --refresh
 
 %end

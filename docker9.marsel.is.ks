@@ -1,4 +1,4 @@
-# Version: 0.4
+# Version: 0.5
 # Host: docker9.marsel.is
 # Tear down, from molly:
 # virsh --connect qemu+ssh://3jane/system destroy docker9.marsel.is; virsh --connect qemu+ssh://3jane/system undefine docker9.marsel.is --nvram --remove-all-storage
@@ -130,7 +130,7 @@ EOF
 #
 # Docker CE: not in AlmaLinux, comes from download.docker.com
 /usr/bin/dnf config-manager --add-repo https://download.docker.com/linux/rhel/docker-ce.repo
-/usr/bin/dnf install -y docker-ce docker-ce-cli containerd.io docker-buildx-plugin
+/usr/bin/dnf install -y docker-ce docker-ce-cli containerd.io docker-buildx-plugin docker-compose-plugin
 /usr/bin/systemctl enable docker.service
 /usr/sbin/usermod -aG docker almalinux
 
@@ -173,7 +173,6 @@ EOF
 /usr/bin/dnf upgrade -y --refresh
 
 # install epel-release packages that could not be installed before the repo was configured
-/usr/bin/dnf install -y ncdu
 /usr/bin/dnf install -y etckeeper
 
 # etckeeper: init now, first commit after first boot
@@ -194,5 +193,8 @@ WantedBy=multi-user.target
 EOF
 
 /usr/bin/systemctl enable etckeeper-initial-commit.service
+
+# The very last upgrade, after everything above has been installed
+/usr/bin/dnf upgrade -y --refresh
 
 %end
